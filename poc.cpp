@@ -8,8 +8,8 @@ void fail(const char *err) {
   throw 0;
 }
 
-constexpr bool ebml_element_id(unsigned id) { return id == 0x1A45DFA3; }
-constexpr bool less_than_8(unsigned val) { return val < 8; }
+constexpr bool ebml_element_id(unsigned id) { return id == 0x0A45DFA3; }
+constexpr bool le_8(unsigned val) { return val <= 8; }
 
 constexpr unsigned octet_count(unsigned char w) {
   unsigned octets{1};
@@ -25,7 +25,7 @@ constexpr mno::req<vint> read_vint(auto &in) {
   unsigned char buf[8];
   return in.read_u8()
       .map(octet_count)
-      .assert(less_than_8, "VINT with more than 8 octets")
+      .assert(le_8, "VINT with more than 8 octets")
       .fmap([&](auto o) {
         // take u16 back
         return in.seekg(-1, yoyo::seek_mode::current).map([&] { return o; });
@@ -48,10 +48,15 @@ constexpr mno::req<vint> read_vint(auto &in) {
 int main() {
   yoyo::file_reader in{"example.mkv"};
 
-  auto id = in.read_u32_be()
+  auto id = read_vint(in)
                 .assert(ebml_element_id, "Expecting EBML element ID")
                 .take(fail);
   auto size = read_vint(in).take(fail);
+  in.seekg(size, yoyo::seek_mode::current).take(fail);
+  silog::log(silog::info, "Header: ID=%lx size=%ld", id, size);
 
-  silog::log(silog::info, "Header: ID=%x size=%ld", id, size);
+  id = read_vint(in).take(fail);
+  size = read_vint(in).take(fail);
+  in.seekg(size, yoyo::seek_mode::current).take(fail);
+  silog::log(silog::info, "Body: ID=%lx size=%ld", id, size);
 }
