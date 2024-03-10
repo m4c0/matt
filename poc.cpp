@@ -8,7 +8,6 @@ void fail(const char *err) {
   throw 0;
 }
 
-constexpr bool ebml_element_id(unsigned id) { return id == 0x1A45DFA3; }
 constexpr bool le_8(unsigned val) { return val <= 8; }
 
 constexpr unsigned octet_count(unsigned char w) {
@@ -66,14 +65,24 @@ constexpr auto read_element(yoyo::reader &in) {
       .map([&] { return res; });
 }
 
+struct ebml_header {
+  unsigned ebml_version;
+};
+constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
+constexpr auto read_ebml_header(yoyo::reader &in) {
+  return mno::req<ebml_header>{};
+}
+
 struct document {
-  element header;
+  ebml_header header;
   element body;
 };
 constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
-      .map([&](auto e) { res.header = e; })
+      .assert(ebml_element_id, "Invalid header")
+      .fmap([&](auto e) { return read_ebml_header(e.data); })
+      .map([&](auto h) { res.header = h; })
       .fmap([&] { return read_element(in); })
       .map([&](auto e) {
         res.body = e;
@@ -103,11 +112,9 @@ constexpr auto read_document(yoyo::reader &in) {
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
-      .fmap([](auto doc) {
-        return dump_root("Header", doc.header).map([&] { return doc; });
-      })
-      .fmap([](auto doc) {
-        return dump_root("Body", doc.body).map([&] { return doc; });
+      .map([](auto doc) {
+        silog::log(silog::info, "EBML version: %d", doc.header.ebml_version);
+        return doc;
       })
       .fmap(
           [](auto doc) { return doc.body.data.seekg(0, yoyo::seek_mode::end); })
