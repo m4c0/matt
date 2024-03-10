@@ -21,7 +21,7 @@ constexpr unsigned octet_count(unsigned char w) {
 }
 
 using vint = unsigned long;
-constexpr mno::req<vint> read_vint(auto &in) {
+constexpr mno::req<vint> read_vint(yoyo::reader &in) {
   unsigned char buf[8];
   return in.read_u8()
       .map(octet_count)
@@ -49,7 +49,7 @@ struct element {
   vint id;
   yoyo::subreader data;
 };
-constexpr auto read_element(auto &in) {
+constexpr auto read_element(yoyo::reader &in) {
   element res{};
   return read_vint(in)
       .fmap([&](auto id) {
@@ -68,7 +68,7 @@ struct document {
   element header;
   element body;
 };
-constexpr auto read_document(auto &in) {
+constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
       .map([&](auto e) { res.header = e; })
