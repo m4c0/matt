@@ -19,8 +19,12 @@ constexpr unsigned octet_count(unsigned char w) {
   return octets;
 }
 
-using vint = unsigned long;
-constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask) {
+using vint = unsigned long long;
+static_assert(sizeof(vint) == 8);
+using uint = unsigned long long;
+static_assert(sizeof(uint) == 8);
+
+constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
   unsigned char buf[8];
   return in.read_u8()
       .map(octet_count)
@@ -46,6 +50,21 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask) {
       });
 }
 
+constexpr mno::req<uint> read_uint(yoyo::reader &in, vint octets, uint def) {
+  if (octets == 0)
+    return mno::req{def};
+
+  unsigned char buf[8];
+  return in.read(buf, octets).map([&] {
+    vint res{};
+    for (auto i = 0; i < octets; i++) {
+      res <<= 8;
+      res |= buf[i];
+    }
+    return res;
+  });
+}
+
 struct element {
   vint id;
   yoyo::subreader data;
@@ -55,7 +74,7 @@ constexpr auto read_element(yoyo::reader &in) {
   return read_vint(in, true)
       .fmap([&](auto id) {
         res.id = id;
-        return read_vint(in, false);
+        return read_vint(in);
       })
       .fmap([&](auto size) { return yoyo::subreader::create(&in, size); })
       .fmap([&](auto sr) {
@@ -69,10 +88,16 @@ struct ebml_header {
   unsigned ebml_version;
 };
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
+
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
   return read_element(in)
       .fmap([&](auto e) {
         switch (e.id) {
+        case 0x4286:
+          return e.data.seekg(0, yoyo::seek_mode::set)
+              .fmap([&] { return read_uint(e.data, e.data.raw_size(), 1); })
+              .map([&](auto i) { res->ebml_version = i; })
+              .fmap([&] { return read_ebml_header(res, in); });
         default:
           return read_ebml_header(res, in);
         }
@@ -107,7 +132,7 @@ constexpr auto read_document(yoyo::reader &in) {
 [[nodiscard]] mno::req<void> dump_sequence(element &e) {
   return read_element(e.data)
       .fmap([&](auto ee) {
-        silog::log(silog::info, "- ID=%lx size=%d", ee.id, ee.data.raw_size());
+        silog::log(silog::info, "- ID=%llx size=%d", ee.id, ee.data.raw_size());
         return e.data.eof();
       })
       .fmap([&](auto eof) {
@@ -118,7 +143,7 @@ constexpr auto read_document(yoyo::reader &in) {
       });
 }
 [[nodiscard]] auto dump_root(const char *name, element &e) {
-  silog::log(silog::info, "%s: ID=%lx size=%d", name, e.id, e.data.raw_size());
+  silog::log(silog::info, "%s: ID=%llx size=%d", name, e.id, e.data.raw_size());
   return e.data.seekg(0, yoyo::seek_mode::set).fmap([&] {
     return dump_sequence(e);
   });
