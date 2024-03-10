@@ -63,22 +63,35 @@ constexpr auto read_element(auto &in) {
       .map([&] { return res; });
 }
 
+struct document {
+  element header;
+  element body;
+};
+constexpr auto read_document(auto &in) {
+  document res{};
+  return read_element(in)
+      .map([&](auto e) { res.header = e; })
+      .fmap([&] { return read_element(in); })
+      .map([&](auto e) {
+        res.body = e;
+        return res;
+      });
+}
+
 int main() {
   yoyo::file_reader in{"example.mkv"};
 
   while (!in.eof().unwrap(true)) {
-    // header
-    read_element(in)
-        .map([](auto e) {
-          auto [id, size] = e;
-          silog::log(silog::info, "%.*sID=%lx size=%ld", 0, "", id, size);
+    read_document(in)
+        .map([](auto doc) {
+          silog::log(silog::info, "Header: ID=%lx size=%ld", doc.header.id,
+                     doc.header.size);
+          silog::log(silog::info, "Body: ID=%lx size=%ld", doc.body.id,
+                     doc.body.size);
         })
-        .take(fail);
-    // body
-    read_element(in)
-        .map([](auto e) {
-          auto [id, size] = e;
-          silog::log(silog::info, "%.*sID=%lx size=%ld", 0, "", id, size);
+        .if_failed([&](auto msg) {
+          return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {
+          });
         })
         .take(fail);
   }
