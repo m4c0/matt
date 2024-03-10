@@ -8,7 +8,7 @@ void fail(const char *err) {
   throw 0;
 }
 
-constexpr bool ebml_element_id(unsigned id) { return id == 0x0A45DFA3; }
+constexpr bool ebml_element_id(unsigned id) { return id == 0x1A45DFA3; }
 constexpr bool le_8(unsigned val) { return val <= 8; }
 
 constexpr unsigned octet_count(unsigned char w) {
@@ -21,7 +21,7 @@ constexpr unsigned octet_count(unsigned char w) {
 }
 
 using vint = unsigned long;
-constexpr mno::req<vint> read_vint(yoyo::reader &in) {
+constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask) {
   unsigned char buf[8];
   return in.read_u8()
       .map(octet_count)
@@ -32,8 +32,10 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in) {
       })
       .fmap([&](auto octets) {
         return in.read(buf, octets).map([&] {
-          unsigned mask = 0x80 >> (octets - 1);
-          buf[0] ^= mask;
+          if (!keep_mask) {
+            unsigned mask = 0x80 >> (octets - 1);
+            buf[0] ^= mask;
+          }
 
           vint res{};
           for (auto i = 0; i < octets; i++) {
@@ -51,10 +53,10 @@ struct element {
 };
 constexpr auto read_element(yoyo::reader &in) {
   element res{};
-  return read_vint(in)
+  return read_vint(in, true)
       .fmap([&](auto id) {
         res.id = id;
-        return read_vint(in);
+        return read_vint(in, false);
       })
       .fmap([&](auto size) { return yoyo::subreader::create(&in, size); })
       .fmap([&](auto sr) {
