@@ -69,8 +69,17 @@ struct ebml_header {
   unsigned ebml_version;
 };
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
-constexpr auto read_ebml_header(yoyo::reader &in) {
-  return mno::req<ebml_header>{};
+constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
+  return read_element(in)
+      .fmap([&](auto e) {
+        switch (e.id) {
+        default:
+          return read_ebml_header(res, in);
+        }
+      })
+      .if_failed([&](auto msg) {
+        return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
+      });
 }
 
 struct document {
@@ -81,7 +90,12 @@ constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
       .assert(ebml_element_id, "Invalid header")
-      .fmap([&](auto e) { return read_ebml_header(e.data); })
+      .fmap([&](auto e) {
+        ebml_header res{};
+        return e.data.seekg(0, yoyo::seek_mode::set)
+            .fmap([&] { return read_ebml_header(&res, e.data); })
+            .map([=] { return res; });
+      })
       .map([&](auto h) { res.header = h; })
       .fmap([&] { return read_element(in); })
       .map([&](auto e) {
