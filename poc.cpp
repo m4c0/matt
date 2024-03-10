@@ -47,7 +47,7 @@ constexpr mno::req<vint> read_vint(auto &in) {
 
 struct element {
   vint id;
-  vint size;
+  yoyo::subreader data;
 };
 constexpr auto read_element(auto &in) {
   element res{};
@@ -56,9 +56,10 @@ constexpr auto read_element(auto &in) {
         res.id = id;
         return read_vint(in);
       })
-      .fmap([&](auto size) {
-        res.size = size;
-        return in.seekg(size, yoyo::seek_mode::current);
+      .fmap([&](auto size) { return yoyo::subreader::create(&in, size); })
+      .fmap([&](auto sr) {
+        res.data = sr;
+        return in.seekg(sr.raw_size(), yoyo::seek_mode::current);
       })
       .map([&] { return res; });
 }
@@ -84,10 +85,10 @@ int main() {
   while (!in.eof().unwrap(true)) {
     read_document(in)
         .map([](auto doc) {
-          silog::log(silog::info, "Header: ID=%lx size=%ld", doc.header.id,
-                     doc.header.size);
-          silog::log(silog::info, "Body: ID=%lx size=%ld", doc.body.id,
-                     doc.body.size);
+          silog::log(silog::info, "Header: ID=%lx size=%d", doc.header.id,
+                     doc.header.data.raw_size());
+          silog::log(silog::info, "Body: ID=%lx size=%d", doc.body.id,
+                     doc.body.data.raw_size());
         })
         .if_failed([&](auto msg) {
           return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {
