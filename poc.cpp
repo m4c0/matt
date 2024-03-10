@@ -81,11 +81,14 @@ constexpr auto read_document(yoyo::reader &in) {
 
 [[nodiscard]] mno::req<void> dump_sequence(element &e) {
   return read_element(e.data)
-      .fmap([&](auto) { return e.data.eof(); })
+      .fmap([&](auto ee) {
+        silog::log(silog::info, "- ID=%lx size=%d", ee.id, ee.data.raw_size());
+        return e.data.eof();
+      })
       .fmap([&](auto eof) {
         if (eof)
           return mno::req<void>{};
-        silog::log(silog::info, "ok");
+
         return dump_sequence(e);
       });
 }
