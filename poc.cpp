@@ -1,6 +1,9 @@
 #pragma leco tool
+import hai;
+import jute;
 import missingno;
 import silog;
+import traits;
 import yoyo;
 
 void fail(const char *err) {
@@ -65,6 +68,17 @@ constexpr mno::req<uint> read_uint(yoyo::reader &in, vint octets, uint def) {
   });
 }
 
+constexpr mno::req<hai::cstr> read_string(yoyo::reader &in, vint octets,
+                                          jute::view def) {
+  if (octets == 0)
+    return mno::req{def.cstr()};
+  if (octets > 65536)
+    return mno::req<hai::cstr>::failed("Unsupported string bigger than 64kb");
+
+  hai::cstr buf{static_cast<unsigned>(octets)};
+  return in.read(buf.data(), octets).map([&] { return traits::move(buf); });
+}
+
 struct element {
   vint id;
   yoyo::subreader data;
@@ -85,6 +99,7 @@ constexpr auto read_element(yoyo::reader &in) {
 }
 
 struct ebml_header {
+  hai::cstr doctype;
   unsigned doctype_read_version;
   unsigned doctype_version;
   unsigned ebml_max_id_length;
@@ -94,10 +109,17 @@ struct ebml_header {
 };
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
-  const auto read_attr = [&](unsigned ebml_header::*m, element &e, uint def) {
+  const auto rd_uint = [&](unsigned ebml_header::*m, element &e, uint def) {
     return e.data.seekg(0, yoyo::seek_mode::set)
         .fmap([&] { return read_uint(e.data, e.data.raw_size(), def); })
         .map([&](auto i) { res->*m = i; })
+        .fmap([&] { return read_ebml_header(res, in); });
+  };
+  const auto rd_str = [&](hai::cstr ebml_header::*m, element &e,
+                          jute::view def) {
+    return e.data.seekg(0, yoyo::seek_mode::set)
+        .fmap([&] { return read_string(e.data, e.data.raw_size(), def); })
+        .map([&](auto &&i) { res->*m = traits::move(i); })
         .fmap([&] { return read_ebml_header(res, in); });
   };
 
@@ -105,18 +127,20 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
       .fmap(
           [&](auto e) {
             switch (e.id) {
+            case 0x4282:
+              return rd_str(&ebml_header::doctype, e, "");
             case 0x4285:
-              return read_attr(&ebml_header::doctype_read_version, e, 1);
+              return rd_uint(&ebml_header::doctype_read_version, e, 1);
             case 0x4286:
-              return read_attr(&ebml_header::ebml_version, e, 1);
+              return rd_uint(&ebml_header::ebml_version, e, 1);
             case 0x4287:
-              return read_attr(&ebml_header::doctype_version, e, 1);
+              return rd_uint(&ebml_header::doctype_version, e, 1);
             case 0x42F2:
-              return read_attr(&ebml_header::ebml_max_id_length, e, 4);
+              return rd_uint(&ebml_header::ebml_max_id_length, e, 4);
             case 0x42F3:
-              return read_attr(&ebml_header::ebml_max_size_length, e, 8);
+              return rd_uint(&ebml_header::ebml_max_size_length, e, 8);
             case 0x42F7:
-              return read_attr(&ebml_header::ebml_read_version, e, 1);
+              return rd_uint(&ebml_header::ebml_read_version, e, 1);
             default:
               return read_ebml_header(res, in);
             }
@@ -135,16 +159,15 @@ constexpr auto read_document(yoyo::reader &in) {
   return read_element(in)
       .assert(ebml_element_id, "Invalid header")
       .fmap([&](auto e) {
-        ebml_header res{};
+        ebml_header hdr{};
         return e.data.seekg(0, yoyo::seek_mode::set)
-            .fmap([&] { return read_ebml_header(&res, e.data); })
-            .map([=] { return res; });
+            .fmap([&] { return read_ebml_header(&hdr, e.data); })
+            .map([&] { res.header = traits::move(hdr); });
       })
-      .map([&](auto h) { res.header = h; })
       .fmap([&] { return read_element(in); })
       .map([&](auto e) {
         res.body = e;
-        return res;
+        return traits::move(res);
       });
 }
 
@@ -170,7 +193,7 @@ constexpr auto read_document(yoyo::reader &in) {
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
-      .map([](auto doc) {
+      .fmap([](auto &&doc) {
         silog::log(silog::info, "EBMLVersion: %d", doc.header.ebml_version);
         silog::log(silog::info, "EBMLReadVersion: %d",
                    doc.header.ebml_read_version);
@@ -178,14 +201,13 @@ constexpr auto read_document(yoyo::reader &in) {
                    doc.header.ebml_max_id_length);
         silog::log(silog::info, "EBMLMaxSizeLength: %d",
                    doc.header.ebml_max_size_length);
+        silog::log(silog::info, "DocType: [%s]", doc.header.doctype.data());
         silog::log(silog::info, "DocTypeVersion: %d",
                    doc.header.doctype_version);
         silog::log(silog::info, "DocTypeReadVersion: %d",
                    doc.header.doctype_read_version);
-        return doc;
+        return doc.body.data.seekg(0, yoyo::seek_mode::end);
       })
-      .fmap(
-          [](auto doc) { return doc.body.data.seekg(0, yoyo::seek_mode::end); })
       .map([] { return false; })
       .if_failed([&](auto msg) {
         return in.eof().assert([](auto v) { return v; }, msg);
