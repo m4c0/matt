@@ -79,21 +79,25 @@ constexpr auto read_document(yoyo::reader &in) {
       });
 }
 
-void dump_root(element &e) { e.data.seekg(0, yoyo::seek_mode::set).take(fail); }
+[[nodiscard]] auto dump_root(element &e) {
+  return e.data.seekg(0, yoyo::seek_mode::set);
+}
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
       .fmap([](auto doc) {
         silog::log(silog::info, "Header: ID=%lx size=%d", doc.header.id,
                    doc.header.data.raw_size());
-        dump_root(doc.header);
+        return dump_root(doc.header).map([&] { return doc; });
+      })
+      .fmap([](auto doc) {
         silog::log(silog::info, "Body: ID=%lx size=%d", doc.body.id,
                    doc.body.data.raw_size());
-        dump_root(doc.body);
-        return doc.body.data.seekg(0, yoyo::seek_mode::end).map([] {
-          return false;
-        });
+        return dump_root(doc.header).map([&] { return doc; });
       })
+      .fmap(
+          [](auto doc) { return doc.body.data.seekg(0, yoyo::seek_mode::end); })
+      .map([] { return false; })
       .if_failed([&](auto msg) {
         return in.eof().assert([](auto v) { return v; }, msg);
       });
