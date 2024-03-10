@@ -85,6 +85,8 @@ constexpr auto read_element(yoyo::reader &in) {
 }
 
 struct ebml_header {
+  unsigned doctype_read_version;
+  unsigned doctype_version;
   unsigned ebml_max_id_length;
   unsigned ebml_max_size_length;
   unsigned ebml_read_version;
@@ -92,8 +94,7 @@ struct ebml_header {
 };
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
-  const auto read_mem_attr = [&](unsigned ebml_header::*m, element &e,
-                                 uint def) {
+  const auto read_attr = [&](unsigned ebml_header::*m, element &e, uint def) {
     return e.data.seekg(0, yoyo::seek_mode::set)
         .fmap([&] { return read_uint(e.data, e.data.raw_size(), def); })
         .map([&](auto i) { res->*m = i; })
@@ -104,14 +105,18 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
       .fmap(
           [&](auto e) {
             switch (e.id) {
+            case 0x4285:
+              return read_attr(&ebml_header::doctype_read_version, e, 1);
             case 0x4286:
-              return read_mem_attr(&ebml_header::ebml_version, e, 1);
+              return read_attr(&ebml_header::ebml_version, e, 1);
+            case 0x4287:
+              return read_attr(&ebml_header::doctype_version, e, 1);
             case 0x42F2:
-              return read_mem_attr(&ebml_header::ebml_max_id_length, e, 1);
+              return read_attr(&ebml_header::ebml_max_id_length, e, 4);
             case 0x42F3:
-              return read_mem_attr(&ebml_header::ebml_max_size_length, e, 8);
+              return read_attr(&ebml_header::ebml_max_size_length, e, 8);
             case 0x42F7:
-              return read_mem_attr(&ebml_header::ebml_read_version, e, 4);
+              return read_attr(&ebml_header::ebml_read_version, e, 1);
             default:
               return read_ebml_header(res, in);
             }
@@ -173,6 +178,10 @@ constexpr auto read_document(yoyo::reader &in) {
                    doc.header.ebml_max_id_length);
         silog::log(silog::info, "EBMLMaxSizeLength: %d",
                    doc.header.ebml_max_size_length);
+        silog::log(silog::info, "DocTypeVersion: %d",
+                   doc.header.doctype_version);
+        silog::log(silog::info, "DocTypeReadVersion: %d",
+                   doc.header.doctype_read_version);
         return doc;
       })
       .fmap(
