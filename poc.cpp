@@ -79,21 +79,30 @@ constexpr auto read_document(yoyo::reader &in) {
       });
 }
 
+void dump_root(element &e) { e.data.seekg(0, yoyo::seek_mode::set).take(fail); }
+
+[[nodiscard]] auto dump_doc(yoyo::reader &in) {
+  return read_document(in)
+      .fmap([](auto doc) {
+        silog::log(silog::info, "Header: ID=%lx size=%d", doc.header.id,
+                   doc.header.data.raw_size());
+        dump_root(doc.header);
+        silog::log(silog::info, "Body: ID=%lx size=%d", doc.body.id,
+                   doc.body.data.raw_size());
+        dump_root(doc.body);
+        return doc.body.data.seekg(0, yoyo::seek_mode::end).map([] {
+          return false;
+        });
+      })
+      .if_failed([&](auto msg) {
+        return in.eof().assert([](auto v) { return v; }, msg);
+      });
+}
+
 int main() {
   yoyo::file_reader in{"example.mkv"};
 
-  while (!in.eof().unwrap(true)) {
-    read_document(in)
-        .map([](auto doc) {
-          silog::log(silog::info, "Header: ID=%lx size=%d", doc.header.id,
-                     doc.header.data.raw_size());
-          silog::log(silog::info, "Body: ID=%lx size=%d", doc.body.id,
-                     doc.body.data.raw_size());
-        })
-        .if_failed([&](auto msg) {
-          return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {
-          });
-        })
-        .take(fail);
+  while (!dump_doc(in).take(fail)) {
+    silog::log(silog::info, "------------------------------------");
   }
 }
