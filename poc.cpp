@@ -45,19 +45,41 @@ constexpr mno::req<vint> read_vint(auto &in) {
       });
 }
 
-void read_element(auto &in, int indent) {
-  auto id = read_vint(in).take(fail);
-  auto size = read_vint(in).take(fail);
-  in.seekg(size, yoyo::seek_mode::current).take(fail);
-  silog::log(silog::info, "%.*sID=%lx size=%ld", indent, "", id, size);
+struct element {
+  vint id;
+  vint size;
+};
+constexpr auto read_element(auto &in) {
+  element res{};
+  return read_vint(in)
+      .fmap([&](auto id) {
+        res.id = id;
+        return read_vint(in);
+      })
+      .fmap([&](auto size) {
+        res.size = size;
+        return in.seekg(size, yoyo::seek_mode::current);
+      })
+      .map([&] { return res; });
 }
 
 int main() {
   yoyo::file_reader in{"example.mkv"};
 
-  // header
-  read_element(in, 0);
-  // body
-  read_element(in, 0);
-  // TODO: loop
+  while (!in.eof().unwrap(true)) {
+    // header
+    read_element(in)
+        .map([](auto e) {
+          auto [id, size] = e;
+          silog::log(silog::info, "%.*sID=%lx size=%ld", 0, "", id, size);
+        })
+        .take(fail);
+    // body
+    read_element(in)
+        .map([](auto e) {
+          auto [id, size] = e;
+          silog::log(silog::info, "%.*sID=%lx size=%ld", 0, "", id, size);
+        })
+        .take(fail);
+  }
 }
