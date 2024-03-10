@@ -79,21 +79,30 @@ constexpr auto read_document(yoyo::reader &in) {
       });
 }
 
-[[nodiscard]] auto dump_root(element &e) {
-  return e.data.seekg(0, yoyo::seek_mode::set);
+[[nodiscard]] mno::req<void> dump_sequence(element &e) {
+  return read_element(e.data)
+      .fmap([&](auto) { return e.data.eof(); })
+      .fmap([&](auto eof) {
+        if (eof)
+          return mno::req<void>{};
+        silog::log(silog::info, "ok");
+        return dump_sequence(e);
+      });
+}
+[[nodiscard]] auto dump_root(const char *name, element &e) {
+  silog::log(silog::info, "%s: ID=%lx size=%d", name, e.id, e.data.raw_size());
+  return e.data.seekg(0, yoyo::seek_mode::set).fmap([&] {
+    return dump_sequence(e);
+  });
 }
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
       .fmap([](auto doc) {
-        silog::log(silog::info, "Header: ID=%lx size=%d", doc.header.id,
-                   doc.header.data.raw_size());
-        return dump_root(doc.header).map([&] { return doc; });
+        return dump_root("Header", doc.header).map([&] { return doc; });
       })
       .fmap([](auto doc) {
-        silog::log(silog::info, "Body: ID=%lx size=%d", doc.body.id,
-                   doc.body.data.raw_size());
-        return dump_root(doc.header).map([&] { return doc; });
+        return dump_root("Body", doc.body).map([&] { return doc; });
       })
       .fmap(
           [](auto doc) { return doc.body.data.seekg(0, yoyo::seek_mode::end); })
