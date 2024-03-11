@@ -98,54 +98,61 @@ constexpr auto read_element(yoyo::reader &in) {
       .map([&] { return res; });
 }
 
-struct ebml_header {
-  hai::cstr doctype;
-  unsigned doctype_read_version;
-  unsigned doctype_version;
-  unsigned ebml_max_id_length;
-  unsigned ebml_max_size_length;
-  unsigned ebml_read_version;
-  unsigned ebml_version;
-};
 constexpr mno::req<void> reset(element &e) {
   return e.data.seekg(0, yoyo::seek_mode::set);
 }
+template <typename Tp> struct element_reader;
+template <> struct element_reader<uint> {
+  static constexpr const auto fn = &read_uint;
+};
+template <> struct element_reader<hai::cstr> {
+  static constexpr const auto fn = &read_string;
+};
+
+template <typename Obj, typename Ret>
+constexpr mno::req<void> read_element_attr(Obj *res, Ret Obj::*m, element e,
+                                           auto def) {
+  return reset(e)
+      .fmap([&] {
+        return element_reader<Ret>::fn(e.data, e.data.raw_size(), def);
+      })
+      .map([&](auto &&i) { res->*m = traits::move(i); });
+}
+
+struct ebml_header {
+  hai::cstr doctype;
+  uint doctype_read_version;
+  uint doctype_version;
+  uint ebml_max_id_length;
+  uint ebml_max_size_length;
+  uint ebml_read_version;
+  uint ebml_version;
+};
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
-  const auto rd_uint = [&](unsigned ebml_header::*m, element &e, uint def) {
-    return reset(e)
-        .fmap([&] { return read_uint(e.data, e.data.raw_size(), def); })
-        .map([&](auto i) { res->*m = i; })
-        .fmap([&] { return read_ebml_header(res, in); });
-  };
-  const auto rd_str = [&](hai::cstr ebml_header::*m, element &e,
-                          jute::view def) {
-    return reset(e)
-        .fmap([&] { return read_string(e.data, e.data.raw_size(), def); })
-        .map([&](auto &&i) { res->*m = traits::move(i); })
-        .fmap([&] { return read_ebml_header(res, in); });
-  };
+  using eh = ebml_header;
 
   return read_element(in)
       .fmap([&](element &e) {
         switch (e.id) {
         case 0x4282:
-          return rd_str(&ebml_header::doctype, e, "");
+          return read_element_attr(res, &eh::doctype, e, jute::view{});
         case 0x4285:
-          return rd_uint(&ebml_header::doctype_read_version, e, 1);
+          return read_element_attr(res, &eh::doctype_read_version, e, 1);
         case 0x4286:
-          return rd_uint(&ebml_header::ebml_version, e, 1);
+          return read_element_attr(res, &eh::ebml_version, e, 1);
         case 0x4287:
-          return rd_uint(&ebml_header::doctype_version, e, 1);
+          return read_element_attr(res, &eh::doctype_version, e, 1);
         case 0x42F2:
-          return rd_uint(&ebml_header::ebml_max_id_length, e, 4);
+          return read_element_attr(res, &eh::ebml_max_id_length, e, 4);
         case 0x42F3:
-          return rd_uint(&ebml_header::ebml_max_size_length, e, 8);
+          return read_element_attr(res, &eh::ebml_max_size_length, e, 8);
         case 0x42F7:
-          return rd_uint(&ebml_header::ebml_read_version, e, 1);
+          return read_element_attr(res, &eh::ebml_read_version, e, 1);
         default:
           return read_ebml_header(res, in);
         }
       })
+      .fmap([&] { return read_ebml_header(res, in); })
       .if_failed([&](auto msg) {
         return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
       });
@@ -203,17 +210,17 @@ constexpr auto read_document(yoyo::reader &in) {
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
       .map([](auto &&doc) {
-        silog::log(silog::info, "EBMLVersion: %d", doc.header.ebml_version);
-        silog::log(silog::info, "EBMLReadVersion: %d",
+        silog::log(silog::info, "EBMLVersion: %lld", doc.header.ebml_version);
+        silog::log(silog::info, "EBMLReadVersion: %lld",
                    doc.header.ebml_read_version);
-        silog::log(silog::info, "EBMLMaxIDLength: %d",
+        silog::log(silog::info, "EBMLMaxIDLength: %lld",
                    doc.header.ebml_max_id_length);
-        silog::log(silog::info, "EBMLMaxSizeLength: %d",
+        silog::log(silog::info, "EBMLMaxSizeLength: %lld",
                    doc.header.ebml_max_size_length);
         silog::log(silog::info, "DocType: [%s]", doc.header.doctype.data());
-        silog::log(silog::info, "DocTypeVersion: %d",
+        silog::log(silog::info, "DocTypeVersion: %lld",
                    doc.header.doctype_version);
-        silog::log(silog::info, "DocTypeReadVersion: %d",
+        silog::log(silog::info, "DocTypeReadVersion: %lld",
                    doc.header.doctype_read_version);
       })
       .map([] { return false; })
