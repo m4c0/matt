@@ -152,8 +152,17 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
 
 struct segment {};
 constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
-  // return read_element(in).map([](auto) {});
-  return in.seekg(0, yoyo::seek_mode::end);
+  return read_element(in)
+      .fmap([&](element &e) {
+        switch (e.id) {
+        default:
+          return mno::req<void>{};
+        }
+      })
+      .fmap([&] { return read_segment(res, in); })
+      .if_failed([&](auto msg) {
+        return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
+      });
 }
 
 struct document {
