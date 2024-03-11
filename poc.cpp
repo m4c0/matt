@@ -126,27 +126,26 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
   };
 
   return read_element(in)
-      .fmap(
-          [&](auto e) {
-            switch (e.id) {
-            case 0x4282:
-              return rd_str(&ebml_header::doctype, e, "");
-            case 0x4285:
-              return rd_uint(&ebml_header::doctype_read_version, e, 1);
-            case 0x4286:
-              return rd_uint(&ebml_header::ebml_version, e, 1);
-            case 0x4287:
-              return rd_uint(&ebml_header::doctype_version, e, 1);
-            case 0x42F2:
-              return rd_uint(&ebml_header::ebml_max_id_length, e, 4);
-            case 0x42F3:
-              return rd_uint(&ebml_header::ebml_max_size_length, e, 8);
-            case 0x42F7:
-              return rd_uint(&ebml_header::ebml_read_version, e, 1);
-            default:
-              return read_ebml_header(res, in);
-            }
-          })
+      .fmap([&](element &e) {
+        switch (e.id) {
+        case 0x4282:
+          return rd_str(&ebml_header::doctype, e, "");
+        case 0x4285:
+          return rd_uint(&ebml_header::doctype_read_version, e, 1);
+        case 0x4286:
+          return rd_uint(&ebml_header::ebml_version, e, 1);
+        case 0x4287:
+          return rd_uint(&ebml_header::doctype_version, e, 1);
+        case 0x42F2:
+          return rd_uint(&ebml_header::ebml_max_id_length, e, 4);
+        case 0x42F3:
+          return rd_uint(&ebml_header::ebml_max_size_length, e, 8);
+        case 0x42F7:
+          return rd_uint(&ebml_header::ebml_read_version, e, 1);
+        default:
+          return read_ebml_header(res, in);
+        }
+      })
       .if_failed([&](auto msg) {
         return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
       });
