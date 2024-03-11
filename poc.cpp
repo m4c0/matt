@@ -161,6 +161,7 @@ struct document {
   segment body;
 };
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
+constexpr bool ebml_segment_id(const element &e) { return e.id == 0x18538067; }
 constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
@@ -172,6 +173,7 @@ constexpr auto read_document(yoyo::reader &in) {
             .map([&] { res.header = traits::move(hdr); });
       })
       .fmap([&] { return read_element(in); })
+      .assert(ebml_segment_id, "Invalid segment")
       .fmap([&](auto e) {
         segment seg{};
         return reset(e)
