@@ -151,9 +151,15 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
       });
 }
 
+struct segment {};
+constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
+  // return read_element(in).map([](auto) {});
+  return in.seekg(0, yoyo::seek_mode::end);
+}
+
 struct document {
   ebml_header header;
-  element body;
+  segment body;
 };
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr auto read_document(yoyo::reader &in) {
@@ -167,10 +173,13 @@ constexpr auto read_document(yoyo::reader &in) {
             .map([&] { res.header = traits::move(hdr); });
       })
       .fmap([&] { return read_element(in); })
-      .map([&](auto e) {
-        res.body = e;
-        return traits::move(res);
-      });
+      .fmap([&](auto e) {
+        segment seg{};
+        return reset(e)
+            .fmap([&] { return read_segment(&seg, e.data); })
+            .map([&] { res.body = seg; });
+      })
+      .map([&] { return traits::move(res); });
 }
 
 [[nodiscard]] mno::req<void> dump_sequence(element &e) {
@@ -193,7 +202,7 @@ constexpr auto read_document(yoyo::reader &in) {
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
-      .fmap([](auto &&doc) {
+      .map([](auto &&doc) {
         silog::log(silog::info, "EBMLVersion: %d", doc.header.ebml_version);
         silog::log(silog::info, "EBMLReadVersion: %d",
                    doc.header.ebml_read_version);
@@ -206,7 +215,6 @@ constexpr auto read_document(yoyo::reader &in) {
                    doc.header.doctype_version);
         silog::log(silog::info, "DocTypeReadVersion: %d",
                    doc.header.doctype_read_version);
-        return doc.body.data.seekg(0, yoyo::seek_mode::end);
       })
       .map([] { return false; })
       .if_failed([&](auto msg) {
