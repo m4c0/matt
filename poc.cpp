@@ -53,30 +53,30 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
       });
 }
 
-constexpr mno::req<uint> read_uint(yoyo::reader &in, vint octets, uint def) {
+constexpr mno::req<void> read_uint(yoyo::reader &in, vint octets, uint *res) {
   if (octets == 0)
-    return mno::req{def};
+    return mno::req<void>{};
 
   unsigned char buf[8];
   return in.read(buf, octets).map([&] {
-    vint res{};
+    *res = 0;
     for (auto i = 0; i < octets; i++) {
-      res <<= 8;
-      res |= buf[i];
+      *res <<= 8;
+      *res |= buf[i];
     }
-    return res;
   });
 }
 
-constexpr mno::req<hai::cstr> read_string(yoyo::reader &in, vint octets,
-                                          jute::view def) {
+constexpr mno::req<void> read_string(yoyo::reader &in, vint octets,
+                                     hai::cstr *str) {
   if (octets == 0)
-    return mno::req{def.cstr()};
-  if (octets > 65536)
-    return mno::req<hai::cstr>::failed("Unsupported string bigger than 64kb");
+    return mno::req<void>{};
 
-  hai::cstr buf{static_cast<unsigned>(octets)};
-  return in.read(buf.data(), octets).map([&] { return traits::move(buf); });
+  if (octets > 65536)
+    return mno::req<void>::failed("Unsupported string bigger than 64kb");
+
+  *str = hai::cstr{static_cast<unsigned>(octets)};
+  return in.read(str->data(), octets);
 }
 
 struct element {
@@ -111,11 +111,9 @@ template <> struct element_reader<hai::cstr> {
 
 template <typename Obj, typename Ret>
 constexpr mno::req<void> read_element_attr(Obj *res, Ret Obj::*m, element e) {
-  return reset(e)
-      .fmap([&] {
-        return element_reader<Ret>::fn(e.data, e.data.raw_size(), res->*m);
-      })
-      .map([&](auto &&i) { res->*m = traits::move(i); });
+  return reset(e).fmap([&] {
+    return element_reader<Ret>::fn(e.data, e.data.raw_size(), &(res->*m));
+  });
 }
 
 struct ebml_header {
