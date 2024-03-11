@@ -110,23 +110,22 @@ template <> struct element_reader<hai::cstr> {
 };
 
 template <typename Obj, typename Ret>
-constexpr mno::req<void> read_element_attr(Obj *res, Ret Obj::*m, element e,
-                                           auto def) {
+constexpr mno::req<void> read_element_attr(Obj *res, Ret Obj::*m, element e) {
   return reset(e)
       .fmap([&] {
-        return element_reader<Ret>::fn(e.data, e.data.raw_size(), def);
+        return element_reader<Ret>::fn(e.data, e.data.raw_size(), res->*m);
       })
       .map([&](auto &&i) { res->*m = traits::move(i); });
 }
 
 struct ebml_header {
-  hai::cstr doctype;
-  uint doctype_read_version;
-  uint doctype_version;
-  uint ebml_max_id_length;
-  uint ebml_max_size_length;
-  uint ebml_read_version;
-  uint ebml_version;
+  hai::cstr doctype{};
+  uint doctype_read_version{1};
+  uint doctype_version{1};
+  uint ebml_max_id_length{4};
+  uint ebml_max_size_length{8};
+  uint ebml_read_version{1};
+  uint ebml_version{1};
 };
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
   using eh = ebml_header;
@@ -135,21 +134,21 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
       .fmap([&](element &e) {
         switch (e.id) {
         case 0x4282:
-          return read_element_attr(res, &eh::doctype, e, jute::view{});
+          return read_element_attr(res, &eh::doctype, e);
         case 0x4285:
-          return read_element_attr(res, &eh::doctype_read_version, e, 1);
+          return read_element_attr(res, &eh::doctype_read_version, e);
         case 0x4286:
-          return read_element_attr(res, &eh::ebml_version, e, 1);
+          return read_element_attr(res, &eh::ebml_version, e);
         case 0x4287:
-          return read_element_attr(res, &eh::doctype_version, e, 1);
+          return read_element_attr(res, &eh::doctype_version, e);
         case 0x42F2:
-          return read_element_attr(res, &eh::ebml_max_id_length, e, 4);
+          return read_element_attr(res, &eh::ebml_max_id_length, e);
         case 0x42F3:
-          return read_element_attr(res, &eh::ebml_max_size_length, e, 8);
+          return read_element_attr(res, &eh::ebml_max_size_length, e);
         case 0x42F7:
-          return read_element_attr(res, &eh::ebml_read_version, e, 1);
+          return read_element_attr(res, &eh::ebml_read_version, e);
         default:
-          return read_ebml_header(res, in);
+          return mno::req<void>{};
         }
       })
       .fmap([&] { return read_ebml_header(res, in); })
