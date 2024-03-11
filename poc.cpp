@@ -107,16 +107,19 @@ struct ebml_header {
   unsigned ebml_read_version;
   unsigned ebml_version;
 };
+constexpr mno::req<void> reset(element &e) {
+  return e.data.seekg(0, yoyo::seek_mode::set);
+}
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
   const auto rd_uint = [&](unsigned ebml_header::*m, element &e, uint def) {
-    return e.data.seekg(0, yoyo::seek_mode::set)
+    return reset(e)
         .fmap([&] { return read_uint(e.data, e.data.raw_size(), def); })
         .map([&](auto i) { res->*m = i; })
         .fmap([&] { return read_ebml_header(res, in); });
   };
   const auto rd_str = [&](hai::cstr ebml_header::*m, element &e,
                           jute::view def) {
-    return e.data.seekg(0, yoyo::seek_mode::set)
+    return reset(e)
         .fmap([&] { return read_string(e.data, e.data.raw_size(), def); })
         .map([&](auto &&i) { res->*m = traits::move(i); })
         .fmap([&] { return read_ebml_header(res, in); });
@@ -160,7 +163,7 @@ constexpr auto read_document(yoyo::reader &in) {
       .assert(ebml_element_id, "Invalid header")
       .fmap([&](auto e) {
         ebml_header hdr{};
-        return e.data.seekg(0, yoyo::seek_mode::set)
+        return reset(e)
             .fmap([&] { return read_ebml_header(&hdr, e.data); })
             .map([&] { res.header = traits::move(hdr); });
       })
@@ -186,9 +189,7 @@ constexpr auto read_document(yoyo::reader &in) {
 }
 [[nodiscard]] auto dump_root(const char *name, element &e) {
   silog::log(silog::info, "%s: ID=%llx size=%d", name, e.id, e.data.raw_size());
-  return e.data.seekg(0, yoyo::seek_mode::set).fmap([&] {
-    return dump_sequence(e);
-  });
+  return reset(e).fmap([&] { return dump_sequence(e); });
 }
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
