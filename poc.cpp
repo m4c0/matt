@@ -53,32 +53,6 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
       });
 }
 
-constexpr mno::req<void> read_uint(yoyo::reader &in, vint octets, uint *res) {
-  if (octets == 0)
-    return mno::req<void>{};
-
-  unsigned char buf[8];
-  return in.read(buf, octets).map([&] {
-    *res = 0;
-    for (auto i = 0; i < octets; i++) {
-      *res <<= 8;
-      *res |= buf[i];
-    }
-  });
-}
-
-constexpr mno::req<void> read_string(yoyo::reader &in, vint octets,
-                                     hai::cstr *str) {
-  if (octets == 0)
-    return mno::req<void>{};
-
-  if (octets > 65536)
-    return mno::req<void>::failed("Unsupported string bigger than 64kb");
-
-  *str = hai::cstr{static_cast<unsigned>(octets)};
-  return in.read(str->data(), octets);
-}
-
 struct element {
   vint id;
   yoyo::subreader data;
@@ -101,18 +75,39 @@ constexpr auto read_element(yoyo::reader &in) {
 constexpr mno::req<void> reset(element &e) {
   return e.data.seekg(0, yoyo::seek_mode::set);
 }
+
 template <typename Tp> struct element_reader;
 template <> struct element_reader<uint> {
-  static constexpr const auto fn = &read_uint;
+  static constexpr mno::req<void> read(yoyo::reader &in, vint octets,
+                                       uint *res) {
+    unsigned char buf[8];
+    return in.read(buf, octets).map([&] {
+      *res = 0;
+      for (auto i = 0; i < octets; i++) {
+        *res <<= 8;
+        *res |= buf[i];
+      }
+    });
+  }
 };
 template <> struct element_reader<hai::cstr> {
-  static constexpr const auto fn = &read_string;
+  static constexpr mno::req<void> read(yoyo::reader &in, vint octets,
+                                       hai::cstr *str) {
+    if (octets > 65536)
+      return mno::req<void>::failed("Unsupported string bigger than 64kb");
+
+    *str = hai::cstr{static_cast<unsigned>(octets)};
+    return in.read(str->data(), octets);
+  }
 };
 
 template <typename Obj, typename Ret>
 constexpr mno::req<void> read_element_attr(Obj *res, Ret Obj::*m, element e) {
   return reset(e).fmap([&] {
-    return element_reader<Ret>::fn(e.data, e.data.raw_size(), &(res->*m));
+    if (e.data.raw_size() == 0)
+      return mno::req<void>{};
+
+    return element_reader<Ret>::read(e.data, e.data.raw_size(), &(res->*m));
   });
 }
 
