@@ -107,7 +107,6 @@ struct ebml_header {
   unsigned ebml_read_version;
   unsigned ebml_version;
 };
-constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
   const auto rd_uint = [&](unsigned ebml_header::*m, element &e, uint def) {
     return e.data.seekg(0, yoyo::seek_mode::set)
@@ -154,6 +153,7 @@ struct document {
   ebml_header header;
   element body;
 };
+constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
