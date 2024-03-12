@@ -92,8 +92,8 @@ constexpr mno::req<yoyo::subreader> reset(element &e) {
 
 template <typename Tp> struct element_reader;
 template <> struct element_reader<uint> {
-  static constexpr mno::req<void> read(yoyo::reader &in, vint octets,
-                                       uint *res) {
+  static constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
+    auto octets = in.raw_size();
     unsigned char buf[8];
     return in.read(buf, octets).map([&] {
       *res = 0;
@@ -105,8 +105,8 @@ template <> struct element_reader<uint> {
   }
 };
 template <> struct element_reader<hai::cstr> {
-  static constexpr mno::req<void> read(yoyo::reader &in, vint octets,
-                                       hai::cstr *str) {
+  static constexpr mno::req<void> read(yoyo::subreader &in, hai::cstr *str) {
+    auto octets = in.raw_size();
     if (octets > 65536)
       return mno::req<void>::failed("Unsupported string bigger than 64kb");
 
@@ -120,7 +120,7 @@ template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
     if (in.raw_size() == 0)
       return mno::req<void>{};
 
-    return element_reader<Tp>::read(in, in.raw_size(), v);
+    return element_reader<Tp>::read(in, v);
   });
 }
 
