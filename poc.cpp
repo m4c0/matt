@@ -42,10 +42,21 @@ struct info {
   uint timestamp_scale;
 };
 
-struct track {};
+struct track {
+  uint number;
+  uint uid;
+  uint type;
+  uint enabled{1};
+  uint def{1};
+  uint lacing{1};
+  uint max_block_add_id{0};
+  hai::cstr codec_id;
+  uint codec_delay{0};
+  uint seek_pre_roll{0};
+};
 
 struct tracks {
-  hai::varray<track> list{8};
+  hai::varray<track> list{16};
 };
 
 struct segment {
@@ -222,6 +233,26 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, info *res) {
 template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
+    case 0xD7:
+      return read_attr(&res->number, e);
+    case 0x73C5:
+      return read_attr(&res->uid, e);
+    case 0x83:
+      return read_attr(&res->type, e);
+    case 0xB9:
+      return read_attr(&res->enabled, e);
+    case 0x88:
+      return read_attr(&res->def, e);
+    case 0x9C:
+      return read_attr(&res->lacing, e);
+    case 0x55EE:
+      return read_attr(&res->max_block_add_id, e);
+    case 0x86:
+      return read_attr(&res->codec_id, e);
+    case 0x56AA:
+      return read_attr(&res->codec_delay, e);
+    case 0x56BB:
+      return read_attr(&res->seek_pre_roll, e);
     default:
       return mno::req<void>{};
     }
@@ -232,7 +263,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, tracks *res) {
     switch (e.id) {
     case 0xAE: {
       track t{};
-      return read_attr(&t, e).map([&] { res->list.push_back_doubling(t); });
+      return read_attr(&t, e).map([&] { res->list.push_back(t); });
     }
     default:
       return mno::req<void>::failed("Non-track element inside tracks");
@@ -271,7 +302,7 @@ constexpr auto read_document(yoyo::reader &in) {
       .map([&] { return traits::move(res); });
 }
 
-[[nodiscard]] static auto translate_id(uint id) {
+[[nodiscard]] static constexpr auto translate_id(uint id) {
   switch (id) {
   case 0x1254c367:
     return "Tags";
@@ -281,6 +312,16 @@ constexpr auto read_document(yoyo::reader &in) {
     return "Tracks";
   default:
     return "<unknown>";
+  }
+}
+[[nodiscard]] static constexpr auto tr_track_type(uint t) {
+  switch (t) {
+  case 1:
+    return "video";
+  case 2:
+    return "audio";
+  default:
+    return "<other>";
   }
 }
 [[nodiscard]] static auto dump_doc(yoyo::reader &in) {
@@ -305,6 +346,18 @@ constexpr auto read_document(yoyo::reader &in) {
         }
         silog::log(silog::info, "Timestamp scale: %lld",
                    doc.body.info.timestamp_scale);
+        for (const auto &t : doc.body.tracks.list) {
+          silog::log(silog::info, "Track %lld", t.number);
+          silog::log(silog::info, "           ID %lld", t.uid);
+          silog::log(silog::info, "         Type %s", tr_track_type(t.type));
+          silog::log(silog::info, "      Enabled %lld", t.enabled);
+          silog::log(silog::info, "      Default %lld", t.def);
+          silog::log(silog::info, "       Lacing %lld", t.lacing);
+          silog::log(silog::info, "  MaxBlkAddID %lld", t.max_block_add_id);
+          silog::log(silog::info, "        Codec %s", t.codec_id.data());
+          silog::log(silog::info, "   CodecDelay %lld", t.codec_delay);
+          silog::log(silog::info, "  SeekPreRoll %lld", t.seek_pre_roll);
+        }
       })
       .map([] { return false; })
       .if_failed([&](auto msg) {
