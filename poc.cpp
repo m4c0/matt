@@ -38,8 +38,13 @@ struct seek_head {
   hashley::siobhan map{17};
 };
 
+struct info {
+  uint timestamp_scale;
+};
+
 struct segment {
   seek_head seek;
+  info info;
 };
 
 struct document {
@@ -193,12 +198,26 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, seek_head *res) {
     }
   });
 }
+// {{{2 read info
+template <> constexpr mno::req<void> read(yoyo::subreader &in, info *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0x2AD7B1:
+      return read_attr(&res->timestamp_scale, e);
+    default:
+      return mno::req<void>{};
+    }
+  });
+}
+
 // {{{2 read segment
 template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
     case 0x114D9B74:
       return read_attr(&res->seek, e);
+    case 0x1549A966:
+      return read_attr(&res->info, e);
     default:
       return mno::req<void>{};
     }
@@ -239,6 +258,8 @@ constexpr auto read_document(yoyo::reader &in) {
         for (auto k : doc.body.seek.keys) {
           silog::log(silog::info, "- 0x%x @%d", k, doc.body.seek.map[k]);
         }
+        silog::log(silog::info, "Timestamp scale: %lld",
+                   doc.body.info.timestamp_scale);
       })
       .map([] { return false; })
       .if_failed([&](auto msg) {
