@@ -91,6 +91,15 @@ constexpr mno::req<yoyo::subreader> reset(element &e) {
 }
 
 template <typename Tp> struct element_reader;
+template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
+  return reset(e).fmap([&](auto in) {
+    if (in.raw_size() == 0)
+      return mno::req<void>{};
+
+    return element_reader<Tp>::read(in, v);
+  });
+}
+
 template <> struct element_reader<uint> {
   static constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
     auto octets = in.raw_size();
@@ -114,43 +123,36 @@ template <> struct element_reader<hai::cstr> {
     return in.read(str->data(), octets);
   }
 };
-
-template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
-  return reset(e).fmap([&](auto in) {
-    if (in.raw_size() == 0)
-      return mno::req<void>{};
-
-    return element_reader<Tp>::read(in, v);
-  });
-}
-
-constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
-  return read_element(in)
-      .fmap([&](element &e) {
-        switch (e.id) {
-        case 0x4282:
-          return read_attr(&res->doctype, e);
-        case 0x4285:
-          return read_attr(&res->doctype_read_version, e);
-        case 0x4286:
-          return read_attr(&res->ebml_version, e);
-        case 0x4287:
-          return read_attr(&res->doctype_version, e);
-        case 0x42F2:
-          return read_attr(&res->ebml_max_id_length, e);
-        case 0x42F3:
-          return read_attr(&res->ebml_max_size_length, e);
-        case 0x42F7:
-          return read_attr(&res->ebml_read_version, e);
-        default:
-          return mno::req<void>{};
-        }
-      })
-      .fmap([&] { return read_ebml_header(res, in); })
-      .if_failed([&](auto msg) {
-        return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
-      });
-}
+template <> struct element_reader<ebml_header> {
+  static constexpr mno::req<void> read(yoyo::subreader &in, ebml_header *res) {
+    return read_element(in)
+        .fmap([&](element &e) {
+          switch (e.id) {
+          case 0x4282:
+            return read_attr(&res->doctype, e);
+          case 0x4285:
+            return read_attr(&res->doctype_read_version, e);
+          case 0x4286:
+            return read_attr(&res->ebml_version, e);
+          case 0x4287:
+            return read_attr(&res->doctype_version, e);
+          case 0x42F2:
+            return read_attr(&res->ebml_max_id_length, e);
+          case 0x42F3:
+            return read_attr(&res->ebml_max_size_length, e);
+          case 0x42F7:
+            return read_attr(&res->ebml_read_version, e);
+          default:
+            return mno::req<void>{};
+          }
+        })
+        .fmap([&] { return read(in, res); })
+        .if_failed([&](auto msg) {
+          return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {
+          });
+        });
+  }
+};
 
 constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
   return read_element(in)
@@ -172,12 +174,7 @@ constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
       .assert(ebml_element_id, "Invalid header")
-      .fmap([&](auto e) {
-        ebml_header hdr{};
-        return reset(e)
-            .fmap([&](auto d) { return read_ebml_header(&hdr, d); })
-            .map([&] { res.header = traits::move(hdr); });
-      })
+      .fmap([&](auto e) { return read_attr(&res.header, e); })
       .fmap([&] { return read_element(in); })
       .assert(ebml_segment_id, "Invalid segment")
       .fmap([&](auto e) {
