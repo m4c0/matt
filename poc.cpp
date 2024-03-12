@@ -148,8 +148,7 @@ constexpr mno::req<void> read(yoyo::subreader &in, ebml_header *res) {
         return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
       });
 }
-
-constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
+template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
   return read_element(in)
       .fmap([&](element &e) {
         switch (e.id) {
@@ -157,7 +156,7 @@ constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
           return mno::req<void>{};
         }
       })
-      .fmap([&] { return read_segment(res, in); })
+      .fmap([&] { return read(in, res); })
       .if_failed([&](auto msg) {
         return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
       });
@@ -172,12 +171,7 @@ constexpr auto read_document(yoyo::reader &in) {
       .fmap([&](auto e) { return read_attr(&res.header, e); })
       .fmap([&] { return read_element(in); })
       .assert(ebml_segment_id, "Invalid segment")
-      .fmap([&](auto e) {
-        segment seg{};
-        return reset(e)
-            .fmap([&](auto d) { return read_segment(&seg, d); })
-            .map([&] { res.body = seg; });
-      })
+      .fmap([&](auto e) { return read_attr(&res.body, e); })
       .map([&] { return traits::move(res); });
 }
 
