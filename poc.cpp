@@ -101,13 +101,12 @@ template <> struct element_reader<hai::cstr> {
   }
 };
 
-template <typename Obj, typename Ret>
-constexpr mno::req<void> read_element_attr(Obj *res, Ret Obj::*m, element e) {
+template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
   return reset(e).fmap([&] {
     if (e.data.raw_size() == 0)
       return mno::req<void>{};
 
-    return element_reader<Ret>::read(e.data, e.data.raw_size(), &(res->*m));
+    return element_reader<Tp>::read(e.data, e.data.raw_size(), v);
   });
 }
 
@@ -121,25 +120,23 @@ struct ebml_header {
   uint ebml_version{1};
 };
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
-  using eh = ebml_header;
-
   return read_element(in)
       .fmap([&](element &e) {
         switch (e.id) {
         case 0x4282:
-          return read_element_attr(res, &eh::doctype, e);
+          return read_attr(&res->doctype, e);
         case 0x4285:
-          return read_element_attr(res, &eh::doctype_read_version, e);
+          return read_attr(&res->doctype_read_version, e);
         case 0x4286:
-          return read_element_attr(res, &eh::ebml_version, e);
+          return read_attr(&res->ebml_version, e);
         case 0x4287:
-          return read_element_attr(res, &eh::doctype_version, e);
+          return read_attr(&res->doctype_version, e);
         case 0x42F2:
-          return read_element_attr(res, &eh::ebml_max_id_length, e);
+          return read_attr(&res->ebml_max_id_length, e);
         case 0x42F3:
-          return read_element_attr(res, &eh::ebml_max_size_length, e);
+          return read_attr(&res->ebml_max_size_length, e);
         case 0x42F7:
-          return read_element_attr(res, &eh::ebml_read_version, e);
+          return read_attr(&res->ebml_read_version, e);
         default:
           return mno::req<void>{};
         }
