@@ -34,7 +34,8 @@ struct seek {
 };
 
 struct seek_head {
-  hashley::siobhan map{16};
+  hai::varray<unsigned> keys{16};
+  hashley::siobhan map{17};
 };
 
 struct segment {
@@ -162,12 +163,31 @@ constexpr mno::req<void> read(yoyo::subreader &in, ebml_header *res) {
     }
   });
 }
+// {{{2 read seek
+template <> constexpr mno::req<void> read(yoyo::subreader &in, seek *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0x53AB:
+      return read_attr(&res->id, e);
+    case 0x53AC:
+      return read_attr(&res->position, e);
+    default:
+      return mno::req<void>::failed("Invalid element inside seek");
+    }
+  });
+}
+
 // {{{2 read seek_list
 template <> constexpr mno::req<void> read(yoyo::subreader &in, seek_head *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
-    case 0x4DBB:
-      return mno::req<void>{};
+    case 0x4DBB: {
+      seek s{};
+      return read_attr(&s, e).map([&] {
+        res->map[s.id] = s.position;
+        res->keys.push_back_doubling(s.id);
+      });
+    }
     default:
       return mno::req<void>::failed("Non-seek element inside seek head");
     }
@@ -215,6 +235,10 @@ constexpr auto read_document(yoyo::reader &in) {
                    doc.header.doctype_version);
         silog::log(silog::info, "DocTypeReadVersion: %lld",
                    doc.header.doctype_read_version);
+        silog::log(silog::info, "SeekHead:");
+        for (auto k : doc.body.seek.keys) {
+          silog::log(silog::info, "- 0x%x @%d", k, doc.body.seek.map[k]);
+        }
       })
       .map([] { return false; })
       .if_failed([&](auto msg) {
