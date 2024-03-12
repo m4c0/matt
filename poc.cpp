@@ -42,6 +42,13 @@ struct info {
   uint timestamp_scale;
 };
 
+struct video {
+  uint interlaced{0};
+  uint field_order{2};
+  uint pixel_width;
+  uint pixel_height;
+};
+
 struct track {
   uint number;
   uint uid;
@@ -53,6 +60,7 @@ struct track {
   hai::cstr codec_id;
   uint codec_delay{0};
   uint seek_pre_roll{0};
+  video video;
 };
 
 struct tracks {
@@ -229,6 +237,24 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, info *res) {
   });
 }
 
+// {{{3 read video
+template <> constexpr mno::req<void> read(yoyo::subreader &in, video *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0x9A:
+      return read_attr(&res->interlaced, e);
+    case 0x9D:
+      return read_attr(&res->field_order, e);
+    case 0xB0:
+      return read_attr(&res->pixel_width, e);
+    case 0xBA:
+      return read_attr(&res->pixel_height, e);
+    default:
+      return mno::req<void>{};
+    }
+  });
+}
+
 // {{{2 read tracks
 template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
   return read_until_eof(in, [&](element &e) {
@@ -253,6 +279,8 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
       return read_attr(&res->codec_delay, e);
     case 0x56BB:
       return read_attr(&res->seek_pre_roll, e);
+    case 0xE0:
+      return read_attr(&res->video, e);
     default:
       return mno::req<void>{};
     }
@@ -357,6 +385,12 @@ constexpr auto read_document(yoyo::reader &in) {
           silog::log(silog::info, "        Codec %s", t.codec_id.data());
           silog::log(silog::info, "   CodecDelay %lld", t.codec_delay);
           silog::log(silog::info, "  SeekPreRoll %lld", t.seek_pre_roll);
+          if (t.type == 1) {
+            silog::log(silog::info, "   Interlaced %lld", t.video.interlaced);
+            silog::log(silog::info, "   FieldOrder %lld", t.video.field_order);
+            silog::log(silog::info, "   PixelWidth %lld", t.video.pixel_width);
+            silog::log(silog::info, "  PixelHeight %lld", t.video.pixel_height);
+          }
         }
       })
       .map([] { return false; })
