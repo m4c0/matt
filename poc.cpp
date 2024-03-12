@@ -6,7 +6,7 @@ import silog;
 import traits;
 import yoyo;
 
-// {{{1 Data Types
+// {{{1 data types
 using vint = unsigned long long;
 static_assert(sizeof(vint) == 8);
 using uint = unsigned long long;
@@ -35,13 +35,7 @@ struct document {
 };
 // }}}1 Data Types
 
-void fail(const char *err) {
-  silog::log(silog::error, "Error: %s", err);
-  throw 0;
-}
-
-constexpr bool le_8(unsigned val) { return val <= 8; }
-
+// {{{1 read element
 constexpr unsigned octet_count(unsigned char w) {
   unsigned octets{1};
   while ((w & 0x80) == 0 && w != 0) {
@@ -50,7 +44,7 @@ constexpr unsigned octet_count(unsigned char w) {
   }
   return octets;
 }
-
+constexpr bool le_8(unsigned val) { return val <= 8; }
 constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
   unsigned char buf[8];
   return in.read_u8()
@@ -76,7 +70,6 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
         });
       });
 }
-
 constexpr auto read_element(yoyo::reader &in) {
   element res{};
   return read_vint(in, true)
@@ -91,6 +84,7 @@ constexpr auto read_element(yoyo::reader &in) {
       })
       .map([&] { return res; });
 }
+// }}}1
 
 constexpr mno::req<yoyo::subreader> reset(element &e) {
   return e.data.seekg(0, yoyo::seek_mode::set).map([&] { return e.data; });
@@ -235,6 +229,10 @@ constexpr auto read_document(yoyo::reader &in) {
       });
 }
 
+void fail(const char *err) {
+  silog::log(silog::error, "Error: %s", err);
+  throw 0;
+}
 int main() {
   yoyo::file_reader in{"example.mkv"};
 
