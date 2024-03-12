@@ -42,9 +42,16 @@ struct info {
   uint timestamp_scale;
 };
 
+struct track {};
+
+struct tracks {
+  hai::varray<track> list{8};
+};
+
 struct segment {
   seek_head seek;
   info info;
+  tracks tracks;
 };
 
 struct document {
@@ -198,6 +205,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, seek_head *res) {
     }
   });
 }
+
 // {{{2 read info
 template <> constexpr mno::req<void> read(yoyo::subreader &in, info *res) {
   return read_until_eof(in, [&](element &e) {
@@ -210,6 +218,28 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, info *res) {
   });
 }
 
+// {{{2 read tracks
+template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    default:
+      return mno::req<void>{};
+    }
+  });
+}
+template <> constexpr mno::req<void> read(yoyo::subreader &in, tracks *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0xAE: {
+      track t{};
+      return read_attr(&t, e).map([&] { res->list.push_back_doubling(t); });
+    }
+    default:
+      return mno::req<void>::failed("Non-track element inside tracks");
+    }
+  });
+}
+
 // {{{2 read segment
 template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
   return read_until_eof(in, [&](element &e) {
@@ -218,6 +248,8 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
       return read_attr(&res->seek, e);
     case 0x1549A966:
       return read_attr(&res->info, e);
+    case 0x1654AE6B:
+      return read_attr(&res->tracks, e);
     default:
       return mno::req<void>{};
     }
