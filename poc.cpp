@@ -239,7 +239,19 @@ constexpr auto read_document(yoyo::reader &in) {
       .map([&] { return traits::move(res); });
 }
 
-[[nodiscard]] auto dump_doc(yoyo::reader &in) {
+[[nodiscard]] static auto translate_id(uint id) {
+  switch (id) {
+  case 0x1254c367:
+    return "Tags";
+  case 0x1549a966:
+    return "Info";
+  case 0x1654ae6b:
+    return "Tracks";
+  default:
+    return "<unknown>";
+  }
+}
+[[nodiscard]] static auto dump_doc(yoyo::reader &in) {
   return read_document(in)
       .map([](auto &&doc) {
         silog::log(silog::info, "EBMLVersion: %lld", doc.header.ebml_version);
@@ -256,7 +268,8 @@ constexpr auto read_document(yoyo::reader &in) {
                    doc.header.doctype_read_version);
         silog::log(silog::info, "SeekHead:");
         for (auto k : doc.body.seek.keys) {
-          silog::log(silog::info, "- 0x%x @%d", k, doc.body.seek.map[k]);
+          silog::log(silog::info, "  %10s @%d", translate_id(k),
+                     doc.body.seek.map[k]);
         }
         silog::log(silog::info, "Timestamp scale: %lld",
                    doc.body.info.timestamp_scale);
