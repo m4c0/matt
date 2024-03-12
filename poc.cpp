@@ -189,24 +189,6 @@ constexpr auto read_document(yoyo::reader &in) {
       .map([&] { return traits::move(res); });
 }
 
-[[nodiscard]] mno::req<void> dump_sequence(element &e) {
-  return read_element(e.data)
-      .fmap([&](auto ee) {
-        silog::log(silog::info, "- ID=%llx size=%d", ee.id, ee.data.raw_size());
-        return e.data.eof();
-      })
-      .fmap([&](auto eof) {
-        if (eof)
-          return mno::req<void>{};
-
-        return dump_sequence(e);
-      });
-}
-[[nodiscard]] auto dump_root(const char *name, element &e) {
-  silog::log(silog::info, "%s: ID=%llx size=%d", name, e.id, e.data.raw_size());
-  return reset(e).fmap([&](auto) { return dump_sequence(e); });
-}
-
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
   return read_document(in)
       .map([](auto &&doc) {
