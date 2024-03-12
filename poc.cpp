@@ -86,18 +86,14 @@ constexpr auto read_element(yoyo::reader &in) {
 }
 // }}}1
 
-constexpr mno::req<yoyo::subreader> reset(element &e) {
-  return e.data.seekg(0, yoyo::seek_mode::set).map([&] { return e.data; });
-}
-
 template <typename Tp>
 constexpr mno::req<void> read(yoyo::subreader &in, Tp *res);
 template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
-  return reset(e).fmap([&](auto in) {
-    if (in.raw_size() == 0)
+  return e.data.seekg(0, yoyo::seek_mode::set).fmap([&] {
+    if (e.data.raw_size() == 0)
       return mno::req<void>{};
 
-    return read(in, v);
+    return read(e.data, v);
   });
 }
 
