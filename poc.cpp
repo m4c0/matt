@@ -72,8 +72,8 @@ constexpr auto read_element(yoyo::reader &in) {
       .map([&] { return res; });
 }
 
-constexpr mno::req<void> reset(element &e) {
-  return e.data.seekg(0, yoyo::seek_mode::set);
+constexpr mno::req<yoyo::subreader> reset(element &e) {
+  return e.data.seekg(0, yoyo::seek_mode::set).map([&] { return e.data; });
 }
 
 template <typename Tp> struct element_reader;
@@ -102,11 +102,11 @@ template <> struct element_reader<hai::cstr> {
 };
 
 template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
-  return reset(e).fmap([&] {
-    if (e.data.raw_size() == 0)
+  return reset(e).fmap([&](auto in) {
+    if (in.raw_size() == 0)
       return mno::req<void>{};
 
-    return element_reader<Tp>::read(e.data, e.data.raw_size(), v);
+    return element_reader<Tp>::read(in, in.raw_size(), v);
   });
 }
 
@@ -175,7 +175,7 @@ constexpr auto read_document(yoyo::reader &in) {
       .fmap([&](auto e) {
         ebml_header hdr{};
         return reset(e)
-            .fmap([&] { return read_ebml_header(&hdr, e.data); })
+            .fmap([&](auto d) { return read_ebml_header(&hdr, d); })
             .map([&] { res.header = traits::move(hdr); });
       })
       .fmap([&] { return read_element(in); })
@@ -183,7 +183,7 @@ constexpr auto read_document(yoyo::reader &in) {
       .fmap([&](auto e) {
         segment seg{};
         return reset(e)
-            .fmap([&] { return read_segment(&seg, e.data); })
+            .fmap([&](auto d) { return read_segment(&seg, d); })
             .map([&] { res.body = seg; });
       })
       .map([&] { return traits::move(res); });
@@ -204,7 +204,7 @@ constexpr auto read_document(yoyo::reader &in) {
 }
 [[nodiscard]] auto dump_root(const char *name, element &e) {
   silog::log(silog::info, "%s: ID=%llx size=%d", name, e.id, e.data.raw_size());
-  return reset(e).fmap([&] { return dump_sequence(e); });
+  return reset(e).fmap([&](auto) { return dump_sequence(e); });
 }
 
 [[nodiscard]] auto dump_doc(yoyo::reader &in) {
