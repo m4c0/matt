@@ -1,5 +1,6 @@
 #pragma leco tool
 import hai;
+import hashley;
 import jute;
 import missingno;
 import silog;
@@ -27,7 +28,18 @@ struct ebml_header {
   uint ebml_version{1};
 };
 
-struct segment {};
+struct seek {
+  uint id;
+  uint position;
+};
+
+struct seek_head {
+  hashley::siobhan map{16};
+};
+
+struct segment {
+  seek_head seek;
+};
 
 struct document {
   ebml_header header;
@@ -150,10 +162,23 @@ constexpr mno::req<void> read(yoyo::subreader &in, ebml_header *res) {
     }
   });
 }
+// {{{2 read seek_list
+template <> constexpr mno::req<void> read(yoyo::subreader &in, seek_head *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0x4DBB:
+      return mno::req<void>{};
+    default:
+      return mno::req<void>::failed("Non-seek element inside seek head");
+    }
+  });
+}
 // {{{2 read segment
 template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
+    case 0x114D9B74:
+      return read_attr(&res->seek, e);
     default:
       return mno::req<void>{};
     }
@@ -161,6 +186,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
 }
 // }}}1
 
+// {{{1 top-level stuff
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr bool ebml_segment_id(const element &e) { return e.id == 0x18538067; }
 constexpr auto read_document(yoyo::reader &in) {
@@ -207,3 +233,4 @@ int main() {
     silog::log(silog::info, "------------------------------------");
   }
 }
+// }}}1
