@@ -42,6 +42,12 @@ struct info {
   uint timestamp_scale;
 };
 
+struct audio {
+  double freq{8000};
+  uint channels{1};
+  uint emphasis{0};
+};
+
 struct video {
   uint interlaced{0};
   uint field_order{2};
@@ -61,6 +67,7 @@ struct track {
   uint codec_delay{0};
   uint seek_pre_roll{0};
   video video;
+  audio audio;
 };
 
 struct tracks {
@@ -161,6 +168,19 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
     }
   });
 }
+// {{{2 read double
+template <> constexpr mno::req<void> read(yoyo::subreader &in, double *res) {
+  switch (in.raw_size()) {
+  case 4: {
+    float f{};
+    return in.read(&f, 4).map([&] { *res = f; });
+  };
+  case 8:
+    return in.read(res, 8);
+  default:
+    return mno::req<void>::failed("Invalid float size");
+  }
+}
 // {{{2 read cstr
 template <> constexpr mno::req<void> read(yoyo::subreader &in, hai::cstr *str) {
   auto octets = in.raw_size();
@@ -255,6 +275,22 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, video *res) {
   });
 }
 
+// {{{3 read audio
+template <> constexpr mno::req<void> read(yoyo::subreader &in, audio *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0xB5:
+      return read_attr(&res->freq, e);
+    case 0x9F:
+      return read_attr(&res->channels, e);
+    case 0x52F1:
+      return read_attr(&res->emphasis, e);
+    default:
+      return mno::req<void>{};
+    }
+  });
+}
+
 // {{{2 read tracks
 template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
   return read_until_eof(in, [&](element &e) {
@@ -281,6 +317,8 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
       return read_attr(&res->seek_pre_roll, e);
     case 0xE0:
       return read_attr(&res->video, e);
+    case 0xE1:
+      return read_attr(&res->audio, e);
     default:
       return mno::req<void>{};
     }
@@ -390,6 +428,10 @@ constexpr auto read_document(yoyo::reader &in) {
             silog::log(silog::info, "   FieldOrder %lld", t.video.field_order);
             silog::log(silog::info, "   PixelWidth %lld", t.video.pixel_width);
             silog::log(silog::info, "  PixelHeight %lld", t.video.pixel_height);
+          } else if (t.type == 2) {
+            silog::log(silog::info, "    Frequency %f", t.audio.freq);
+            silog::log(silog::info, "     Channels %lld", t.audio.channels);
+            silog::log(silog::info, "     Emphasis %lld", t.audio.emphasis);
           }
         }
       })
