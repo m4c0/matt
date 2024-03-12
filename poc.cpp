@@ -33,7 +33,6 @@ struct document {
   ebml_header header;
   segment body;
 };
-// }}}1 Data Types
 
 // {{{1 read element
 constexpr unsigned octet_count(unsigned char w) {
@@ -84,8 +83,9 @@ constexpr auto read_element(yoyo::reader &in) {
       })
       .map([&] { return res; });
 }
-// }}}1
 
+// {{{1 read attribute
+// {{{2 generic interface
 template <typename Tp>
 constexpr mno::req<void> read(yoyo::subreader &in, Tp *res);
 template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
@@ -96,7 +96,16 @@ template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
     return read(e.data, v);
   });
 }
+constexpr mno::req<void> read_until_eof(yoyo::subreader &in, const auto &fn) {
+  return read_element(in)
+      .fmap(fn)
+      .fmap([&] { return read_until_eof(in, fn); })
+      .if_failed([&](auto msg) {
+        return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
+      });
+}
 
+// {{{2 read uint
 template <> constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
   auto octets = in.raw_size();
   unsigned char buf[8];
@@ -108,6 +117,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
     }
   });
 }
+// {{{2 read cstr
 template <> constexpr mno::req<void> read(yoyo::subreader &in, hai::cstr *str) {
   auto octets = in.raw_size();
   if (octets > 65536)
@@ -116,47 +126,40 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, hai::cstr *str) {
   *str = hai::cstr{static_cast<unsigned>(octets)};
   return in.read(str->data(), octets);
 }
+// {{{2 read ebml_header
 template <>
 constexpr mno::req<void> read(yoyo::subreader &in, ebml_header *res) {
-  return read_element(in)
-      .fmap([&](element &e) {
-        switch (e.id) {
-        case 0x4282:
-          return read_attr(&res->doctype, e);
-        case 0x4285:
-          return read_attr(&res->doctype_read_version, e);
-        case 0x4286:
-          return read_attr(&res->ebml_version, e);
-        case 0x4287:
-          return read_attr(&res->doctype_version, e);
-        case 0x42F2:
-          return read_attr(&res->ebml_max_id_length, e);
-        case 0x42F3:
-          return read_attr(&res->ebml_max_size_length, e);
-        case 0x42F7:
-          return read_attr(&res->ebml_read_version, e);
-        default:
-          return mno::req<void>{};
-        }
-      })
-      .fmap([&] { return read(in, res); })
-      .if_failed([&](auto msg) {
-        return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
-      });
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0x4282:
+      return read_attr(&res->doctype, e);
+    case 0x4285:
+      return read_attr(&res->doctype_read_version, e);
+    case 0x4286:
+      return read_attr(&res->ebml_version, e);
+    case 0x4287:
+      return read_attr(&res->doctype_version, e);
+    case 0x42F2:
+      return read_attr(&res->ebml_max_id_length, e);
+    case 0x42F3:
+      return read_attr(&res->ebml_max_size_length, e);
+    case 0x42F7:
+      return read_attr(&res->ebml_read_version, e);
+    default:
+      return mno::req<void>{};
+    }
+  });
 }
+// {{{2 read segment
 template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
-  return read_element(in)
-      .fmap([&](element &e) {
-        switch (e.id) {
-        default:
-          return mno::req<void>{};
-        }
-      })
-      .fmap([&] { return read(in, res); })
-      .if_failed([&](auto msg) {
-        return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
-      });
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    default:
+      return mno::req<void>{};
+    }
+  });
 }
+// }}}1
 
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr bool ebml_segment_id(const element &e) { return e.id == 0x18538067; }
