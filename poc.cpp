@@ -6,6 +6,35 @@ import silog;
 import traits;
 import yoyo;
 
+// {{{1 Data Types
+using vint = unsigned long long;
+static_assert(sizeof(vint) == 8);
+using uint = unsigned long long;
+static_assert(sizeof(uint) == 8);
+
+struct element {
+  vint id;
+  yoyo::subreader data;
+};
+
+struct ebml_header {
+  hai::cstr doctype{};
+  uint doctype_read_version{1};
+  uint doctype_version{1};
+  uint ebml_max_id_length{4};
+  uint ebml_max_size_length{8};
+  uint ebml_read_version{1};
+  uint ebml_version{1};
+};
+
+struct segment {};
+
+struct document {
+  ebml_header header;
+  segment body;
+};
+// }}}1 Data Types
+
 void fail(const char *err) {
   silog::log(silog::error, "Error: %s", err);
   throw 0;
@@ -21,11 +50,6 @@ constexpr unsigned octet_count(unsigned char w) {
   }
   return octets;
 }
-
-using vint = unsigned long long;
-static_assert(sizeof(vint) == 8);
-using uint = unsigned long long;
-static_assert(sizeof(uint) == 8);
 
 constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
   unsigned char buf[8];
@@ -53,10 +77,6 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
       });
 }
 
-struct element {
-  vint id;
-  yoyo::subreader data;
-};
 constexpr auto read_element(yoyo::reader &in) {
   element res{};
   return read_vint(in, true)
@@ -110,15 +130,6 @@ template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
   });
 }
 
-struct ebml_header {
-  hai::cstr doctype{};
-  uint doctype_read_version{1};
-  uint doctype_version{1};
-  uint ebml_max_id_length{4};
-  uint ebml_max_size_length{8};
-  uint ebml_read_version{1};
-  uint ebml_version{1};
-};
 constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
   return read_element(in)
       .fmap([&](element &e) {
@@ -147,7 +158,6 @@ constexpr mno::req<void> read_ebml_header(ebml_header *res, yoyo::reader &in) {
       });
 }
 
-struct segment {};
 constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
   return read_element(in)
       .fmap([&](element &e) {
@@ -162,10 +172,6 @@ constexpr mno::req<void> read_segment(segment *res, yoyo::subreader &in) {
       });
 }
 
-struct document {
-  ebml_header header;
-  segment body;
-};
 constexpr bool ebml_element_id(const element &e) { return e.id == 0x1A45DFA3; }
 constexpr bool ebml_segment_id(const element &e) { return e.id == 0x18538067; }
 constexpr auto read_document(yoyo::reader &in) {
