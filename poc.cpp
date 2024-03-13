@@ -76,6 +76,7 @@ struct tracks {
 
 struct cluster {
   uint timestamp;
+  hai::varray<yoyo::subreader> blocks{8};
 };
 
 struct segment {
@@ -400,7 +401,12 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, cluster *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
     case 0xE7:
-      read_attr(&res->timestamp, e);
+      return read_attr(&res->timestamp, e);
+    case 0xA3:
+      res->blocks.push_back_doubling(in);
+      return mno::req<void>{};
+    case 0xA0:
+      return mno::req<void>::failed("BlockGroup TBD");
     default:
       return mno::req<void>{};
     }
@@ -419,7 +425,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
       return read_attr(&res->tracks, e);
     case 0x1F43B675: {
       cluster c{};
-      return read_attr(&c, e).map([&] { res->clusters.push_back_doubling(c); });
+      return read_attr(&c, e).map([&] { res->clusters.push_back(c); });
     }
     default:
       return mno::req<void>{};
@@ -510,6 +516,9 @@ constexpr auto read_document(yoyo::reader &in) {
         }
         for (const auto &c : doc.body.clusters) {
           silog::log(silog::info, "Cluster @%lld", c.timestamp);
+          for (const auto &b : c.blocks) {
+            silog::log(silog::info, "- Block size=%d", b.raw_size());
+          }
         }
       })
       .map([] { return false; })
