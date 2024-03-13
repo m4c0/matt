@@ -172,7 +172,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
 template <> constexpr mno::req<void> read(yoyo::subreader &in, double *res) {
   switch (in.raw_size()) {
   case 4: {
-    return in.read_u32().map([&](auto n) {
+    return in.read_u32_be().map([&](auto n) {
       long exp = static_cast<long>((n >> 23) & 0xFF) - ((1 << (8 - 1)) - 1);
       unsigned long man = n & ((1 << 23) - 1);
       unsigned long sign = man | (1 << 23);
@@ -193,7 +193,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, double *res) {
     });
   }
   case 8: {
-    return in.read_u64().map([&](auto n) {
+    return in.read_u64_be().map([&](auto n) {
       long exp = static_cast<long>((n >> 52) & 0x7FF) - ((1 << (11 - 1)) - 1);
       unsigned long man = n & ((1L << 52) - 1);
       unsigned long sign = man | (1L << 52);
@@ -229,9 +229,9 @@ template <auto N> static constexpr double test(const char (&buf)[N]) {
 // Tests with weird exponents (this gets exp = 200, which is larger than any
 // available int)
 static_assert(0 < test("abcd"));
-static_assert(0.15625 == test("\0\0\x20\x3e"));
-static_assert(25 == test("\0\0\xC8\x41"));
-static_assert(0.01171875 == test("\0\0\0\0\0\0\x88\x3F"));
+static_assert(0.15625 == test("\x3e\x20\0\0"));
+static_assert(25 == test("\x41\xC8\0\0"));
+static_assert(0.01171875 == test("\x3F\x88\0\0\0\0\0\0"));
 } // namespace
 
 // {{{2 read cstr
