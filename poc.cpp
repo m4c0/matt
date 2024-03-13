@@ -74,10 +74,15 @@ struct tracks {
   hai::varray<track> list{16};
 };
 
+struct cluster {
+  uint timestamp;
+};
+
 struct segment {
   seek_head seek;
   info info;
   tracks tracks;
+  hai::varray<cluster> clusters{1024};
 };
 
 struct document {
@@ -390,6 +395,18 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, tracks *res) {
   });
 }
 
+// {{{2 read cluster
+template <> constexpr mno::req<void> read(yoyo::subreader &in, cluster *res) {
+  return read_until_eof(in, [&](element &e) {
+    switch (e.id) {
+    case 0xE7:
+      read_attr(&res->timestamp, e);
+    default:
+      return mno::req<void>{};
+    }
+  });
+}
+
 // {{{2 read segment
 template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
   return read_until_eof(in, [&](element &e) {
@@ -400,6 +417,10 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, segment *res) {
       return read_attr(&res->info, e);
     case 0x1654AE6B:
       return read_attr(&res->tracks, e);
+    case 0x1F43B675: {
+      cluster c{};
+      return read_attr(&c, e).map([&] { res->clusters.push_back_doubling(c); });
+    }
     default:
       return mno::req<void>{};
     }
@@ -486,6 +507,9 @@ constexpr auto read_document(yoyo::reader &in) {
             silog::log(silog::info, "     Channels %lld", t.audio.channels);
             silog::log(silog::info, "     Emphasis %lld", t.audio.emphasis);
           }
+        }
+        for (const auto &c : doc.body.clusters) {
+          silog::log(silog::info, "Cluster @%lld", c.timestamp);
         }
       })
       .map([] { return false; })
