@@ -172,15 +172,68 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, uint *res) {
 template <> constexpr mno::req<void> read(yoyo::subreader &in, double *res) {
   switch (in.raw_size()) {
   case 4: {
-    float f{};
-    return in.read(&f, 4).map([&] { *res = f; });
-  };
-  case 8:
-    return in.read(res, 8);
+    return in.read_u32().map([&](auto n) {
+      long exp = static_cast<long>((n >> 23) & 0xFF) - ((1 << (8 - 1)) - 1);
+      unsigned long man = n & ((1 << 23) - 1);
+      unsigned long sign = man | (1 << 23);
+      float decs = sign / static_cast<float>(1 << 23);
+
+      float d = (n & (1 << 31)) ? -1 : 1;
+      d *= decs;
+      if (exp > 0) {
+        for (auto i = 0; i < exp; i++) {
+          d *= 2.0;
+        }
+      } else {
+        for (auto i = 0; i < -exp; i++) {
+          d *= 0.5;
+        }
+      }
+      *res = d;
+    });
+  }
+  case 8: {
+    return in.read_u64().map([&](auto n) {
+      long exp = static_cast<long>((n >> 52) & 0x7FF) - ((1 << (11 - 1)) - 1);
+      unsigned long man = n & ((1L << 52) - 1);
+      unsigned long sign = man | (1L << 52);
+      double decs = sign / static_cast<float>(1L << 52);
+
+      double d = (n & (1L << 63)) ? -1 : 1;
+      d *= decs;
+      if (exp > 0) {
+        for (auto i = 0; i < exp; i++) {
+          d *= 2.0;
+        }
+      } else {
+        for (auto i = 0; i < -exp; i++) {
+          d *= 0.5;
+        }
+      }
+      *res = d;
+    });
+  }
   default:
     return mno::req<void>::failed("Invalid float size");
   }
 }
+namespace {
+template <auto N> static constexpr double test(const char (&buf)[N]) {
+  yoyo::ce_reader in{buf};
+  double res{};
+  return yoyo::subreader::create(&in, N - 1)
+      .fmap([&](auto sub) { return read(sub, &res); })
+      .map([&] { return res; })
+      .unwrap(0.0);
+}
+// Tests with weird exponents (this gets exp = 200, which is larger than any
+// available int)
+static_assert(0 < test("abcd"));
+static_assert(0.15625 == test("\0\0\x20\x3e"));
+static_assert(25 == test("\0\0\xC8\x41"));
+static_assert(0.01171875 == test("\0\0\0\0\0\0\x88\x3F"));
+} // namespace
+
 // {{{2 read cstr
 template <> constexpr mno::req<void> read(yoyo::subreader &in, hai::cstr *str) {
   auto octets = in.raw_size();
