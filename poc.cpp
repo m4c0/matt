@@ -532,7 +532,7 @@ void fail(const char *err) {
   throw 0;
 }
 int main() {
-  yoyo::file_reader in{"example.mkv"};
+  auto in = yoyo::file_reader::open("example.mkv").take(fail);
 
   while (!dump_doc(in).take(fail)) {
     silog::log(silog::info, "------------------------------------");
