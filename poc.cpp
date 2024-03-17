@@ -7,10 +7,12 @@ import silog;
 import traits;
 import yoyo;
 
+using namespace traits::ints;
+
 // {{{1 data types
-using vint = unsigned long long;
+using vint = uint64_t;
 static_assert(sizeof(vint) == 8);
-using uint = unsigned long long;
+using uint = uint64_t;
 static_assert(sizeof(uint) == 8);
 
 struct element {
@@ -179,9 +181,10 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, double *res) {
   switch (in.raw_size()) {
   case 4: {
     return in.read_u32_be().map([&](auto n) {
-      long exp = static_cast<long>((n >> 23) & 0xFF) - ((1 << (8 - 1)) - 1);
-      unsigned long man = n & ((1 << 23) - 1);
-      unsigned long sign = man | (1 << 23);
+      int64_t exp =
+          static_cast<int64_t>((n >> 23) & 0xFF) - ((1 << (8 - 1)) - 1);
+      uint64_t man = n & ((1 << 23) - 1);
+      uint64_t sign = man | (1 << 23);
       float decs = sign / static_cast<float>(1 << 23);
 
       float d = (n & (1 << 31)) ? -1 : 1;
@@ -200,12 +203,13 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, double *res) {
   }
   case 8: {
     return in.read_u64_be().map([&](auto n) {
-      long exp = static_cast<long>((n >> 52) & 0x7FF) - ((1 << (11 - 1)) - 1);
-      unsigned long man = n & ((1L << 52) - 1);
-      unsigned long sign = man | (1L << 52);
-      double decs = sign / static_cast<float>(1L << 52);
+      int64_t exp =
+          static_cast<int64_t>((n >> 52) & 0x7FF) - ((1 << (11 - 1)) - 1);
+      uint64_t man = n & ((1ULL << 52) - 1);
+      uint64_t sign = man | (1ULL << 52);
+      double decs = sign / static_cast<float>(1ULL << 52);
 
-      double d = (n & (1L << 63)) ? -1 : 1;
+      double d = (n & (1ULL << 63)) ? -1 : 1;
       d *= decs;
       if (exp > 0) {
         for (auto i = 0; i < exp; i++) {
