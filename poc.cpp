@@ -295,6 +295,8 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, seek *res) {
 template <> constexpr mno::req<void> read(yoyo::subreader &in, seek_head *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
+    case 0xBF: // CRC-32
+      return mno::req<void>{};
     case 0x4DBB: {
       seek s{};
       return read_attr(&s, e).map([&] {
@@ -390,6 +392,8 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, track *res) {
 template <> constexpr mno::req<void> read(yoyo::subreader &in, tracks *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
+    case 0xBF: // CRC-32
+      return mno::req<void>{};
     case 0xAE: {
       track t{};
       return read_attr(&t, e).map([&] { res->list.push_back(t); });
