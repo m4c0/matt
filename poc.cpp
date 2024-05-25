@@ -162,6 +162,7 @@ template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
 }
 constexpr mno::req<void> read_until_eof(yoyo::subreader &in, const auto &fn) {
   return read_element(in)
+      .trace("reading list of elements")
       .fmap(fn)
       .fmap([&] { return read_until_eof(in, fn); })
       .if_failed([&](auto msg) {
@@ -453,9 +454,11 @@ constexpr bool ebml_segment_id(const element &e) { return e.id == 0x18538067; }
 constexpr auto read_document(yoyo::reader &in) {
   document res{};
   return read_element(in)
+      .trace("reading header")
       .assert(ebml_element_id, "Invalid header")
       .fmap([&](auto e) { return read_attr(&res.header, e); })
       .fmap([&] { return read_element(in); })
+      .trace("reading segment")
       .assert(ebml_segment_id, "Invalid segment")
       .fmap([&](auto e) { return read_attr(&res.body, e); })
       .map([&] { return traits::move(res); });
