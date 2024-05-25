@@ -110,7 +110,9 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
       .assert(le_8, "VINT with more than 8 octets")
       .fmap([&](auto o) {
         // take u16 back
-        return in.seekg(-1, yoyo::seek_mode::current).map([&] { return o; });
+        return in.seekg(-1, yoyo::seek_mode::current)
+            .trace("reading vint")
+            .map([&] { return o; });
       })
       .fmap([&](auto octets) {
         return in.read(buf, octets).map([&] {
@@ -138,7 +140,8 @@ constexpr auto read_element(yoyo::reader &in) {
       .fmap([&](auto size) { return yoyo::subreader::create(&in, size); })
       .fmap([&](auto sr) {
         res.data = sr;
-        return in.seekg(sr.raw_size(), yoyo::seek_mode::current);
+        return in.seekg(sr.raw_size(), yoyo::seek_mode::current)
+            .trace("jumping to end of element");
       })
       .map([&] { return res; });
 }
@@ -148,12 +151,14 @@ constexpr auto read_element(yoyo::reader &in) {
 template <typename Tp>
 constexpr mno::req<void> read(yoyo::subreader &in, Tp *res);
 template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
-  return e.data.seekg(0, yoyo::seek_mode::set).fmap([&] {
-    if (e.data.raw_size() == 0)
-      return mno::req<void>{};
+  return e.data.seekg(0, yoyo::seek_mode::set)
+      .trace("reading attribute")
+      .fmap([&] {
+        if (e.data.raw_size() == 0)
+          return mno::req<void>{};
 
-    return read(e.data, v);
-  });
+        return read(e.data, v);
+      });
 }
 constexpr mno::req<void> read_until_eof(yoyo::subreader &in, const auto &fn) {
   return read_element(in)
