@@ -535,8 +535,8 @@ constexpr auto read_document(yoyo::reader &in) {
       });
 }
 
-void fail(const char *err) {
-  silog::log(silog::error, "Error: %s", err);
+void fail(jute::view err) {
+  silog::log(silog::error, "Error: %s", err.cstr().begin());
   throw 0;
 }
 int main() {
