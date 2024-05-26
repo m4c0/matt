@@ -486,7 +486,7 @@ constexpr auto read_document(yoyo::reader &in) {
     return "<other>";
   }
 }
-[[nodiscard]] static auto dump_doc(yoyo::reader &in) {
+[[nodiscard]] static mno::req<void> dump_doc(yoyo::reader &in) {
   return read_document(in)
       .map([](auto &&doc) {
         silog::log(silog::info, "EBMLVersion: %lld", doc.header.ebml_version);
@@ -540,18 +540,20 @@ constexpr auto read_document(yoyo::reader &in) {
       .map([] { return false; })
       .if_failed([&](auto msg) {
         return in.eof().assert([](auto v) { return v; }, msg);
+      })
+      .fmap([&](bool eof) {
+        if (eof)
+          return mno::req<void>{};
+
+        silog::log(silog::info, "------------------------------------");
+        return dump_doc(in);
       });
 }
 
-void fail(jute::view err) {
-  silog::log(silog::error, "Error: %s", err.cstr().begin());
-  throw 0;
-}
 int main() {
-  auto in = yoyo::file_reader::open("example.mkv").take(fail);
-
-  while (!dump_doc(in).take(fail)) {
-    silog::log(silog::info, "------------------------------------");
-  }
+  yoyo::file_reader::open("F:\\Sandbox\\OBS\\2023-08-19_15-07-06.mkv")
+      .trace("reading movie")
+      .fmap(dump_doc)
+      .log_error();
 }
 // }}}1
