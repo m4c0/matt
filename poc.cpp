@@ -533,7 +533,7 @@ constexpr auto read_document(yoyo::reader &in) {
         for (const auto &c : doc.body.clusters) {
           silog::log(silog::info, "Cluster @%lld", c.timestamp);
           for (const auto &b : c.blocks) {
-            silog::log(silog::info, "- Block size=%d", b.raw_size());
+            silog::log(silog::info, "- Block size=%lld", b.raw_size());
           }
         }
       })
@@ -552,8 +552,8 @@ constexpr auto read_document(yoyo::reader &in) {
 
 int main() {
   yoyo::file_reader::open("F:\\Sandbox\\OBS\\2023-08-19_15-07-06.mkv")
-      .trace("reading movie")
       .fmap(dump_doc)
+      .trace("reading movie")
       .log_error();
 }
 // }}}1
