@@ -486,6 +486,33 @@ constexpr auto read_document(yoyo::reader &in) {
     return "<other>";
   }
 }
+
+constexpr static char hexdigit(unsigned n) {
+  return n > 10 ? 'A' + n : '0' + n;
+}
+[[nodiscard]] static mno::req<void> hexdump_line(yoyo::subreader r) {
+  char octets[16];
+  return r.read(octets, sizeof(octets)).map([&] {
+    jute::heap line{""};
+    for (auto c : octets) {
+      char octet[]{"   "};
+      octet[0] = hexdigit(c / 16);
+      octet[1] = hexdigit(c % 16);
+      line = line + jute::view{octet};
+    }
+    silog::log(silog::info, "%*s", static_cast<unsigned>((*line).size()),
+               (*line).data());
+  });
+}
+
+[[nodiscard]] static mno::req<void> hexdump(yoyo::subreader r) {
+  mno::req<void> res{};
+  for (auto i = 0; i < 10 && res.is_valid(); i++) {
+    res = hexdump_line(r);
+  }
+  return res;
+}
+
 [[nodiscard]] static mno::req<void> dump_doc(yoyo::reader &in) {
   return read_document(in)
       .map([](auto &&doc) {
