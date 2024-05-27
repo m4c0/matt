@@ -130,7 +130,7 @@ constexpr mno::req<vint> read_vint(yoyo::reader &in, bool keep_mask = false) {
         });
       });
 }
-constexpr auto read_element(yoyo::reader &in) {
+constexpr auto read_element(auto &in) { // reader or subreader
   element res{};
   return read_vint(in, true)
       .fmap([&](auto id) {
@@ -488,19 +488,19 @@ constexpr auto read_document(yoyo::reader &in) {
 }
 
 constexpr static char hexdigit(unsigned n) {
-  return n > 10 ? 'A' + n : '0' + n;
+  return n >= 10 ? ('A' + (n - 10)) : ('0' + n);
 }
 [[nodiscard]] static mno::req<void> hexdump_line(yoyo::subreader r) {
   char octets[16];
   return r.read(octets, sizeof(octets)).map([&] {
     jute::heap line{""};
-    for (auto c : octets) {
+    for (unsigned char c : octets) {
       char octet[]{"   "};
       octet[0] = hexdigit(c / 16);
       octet[1] = hexdigit(c % 16);
       line = line + jute::view{octet};
     }
-    silog::log(silog::info, "%*s", static_cast<unsigned>((*line).size()),
+    silog::log(silog::info, "%.*s", static_cast<unsigned>((*line).size()),
                (*line).data());
   });
 }
@@ -558,10 +558,13 @@ constexpr static char hexdigit(unsigned n) {
           }
         }
         for (const auto &c : doc.body.clusters) {
-          silog::log(silog::info, "Cluster @%lld", c.timestamp);
-          for (const auto &b : c.blocks) {
-            silog::log(silog::info, "- Block size=%lld", b.raw_size());
-          }
+          silog::log(silog::info, "Cluster @%ld (%d blocks)", c.timestamp,
+                     c.blocks.size());
+          auto blk = c.blocks[0];
+          blk.seekg(0, yoyo::seek_mode::set)
+              .fmap([&] { return hexdump(blk); })
+              .fmap([&] { return blk.seekg(0, yoyo::seek_mode::end); })
+              .log_error();
         }
       })
       .map([] { return false; })
