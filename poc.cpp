@@ -551,7 +551,7 @@ constexpr auto read_document(yoyo::reader &in) {
 }
 
 int main() {
-  yoyo::file_reader::open("F:\\Sandbox\\OBS\\2023-08-19_15-07-06.mkv")
+  yoyo::file_reader::open("example.mkv")
       .fmap(dump_doc)
       .trace("reading movie")
       .log_error();
