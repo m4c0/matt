@@ -417,7 +417,7 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, cluster *res) {
     case 0xE7:
       return read_attr(&res->timestamp, e);
     case 0xA3:
-      res->blocks.push_back_doubling(in);
+      res->blocks.push_back_doubling(e.data);
       return mno::req<void>{};
     case 0xA0:
       return mno::req<void>::failed("BlockGroup TBD");
