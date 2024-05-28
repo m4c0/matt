@@ -161,13 +161,11 @@ template <typename Tp> constexpr mno::req<void> read_attr(Tp *v, element e) {
       });
 }
 constexpr mno::req<void> read_until_eof(yoyo::subreader &in, const auto &fn) {
-  mno::req<void> res{};
-  while (res.is_valid()) {
-    res = read_element(in).trace("reading list of elements").fmap(fn);
-  }
-  return res.if_failed([&](auto msg) {
-    return in.eof().assert([](auto v) { return v; }, msg).map([](auto) {});
-  });
+  return mno::req<void>{}.until_failure(
+      [&] {
+        return read_element(in).trace("reading list of elements").fmap(fn);
+      },
+      [&](auto err) { return !in.eof().unwrap(false); });
 }
 
 // {{{2 read uint
