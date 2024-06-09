@@ -77,6 +77,15 @@ struct tracks {
 };
 
 struct block {
+  uint track;
+  int16_t timestamp;
+  struct {
+    bool keyframe : 1;
+    int reserved : 3;
+    bool invisible : 1;
+    int lacing : 2;
+    bool discardable : 1;
+  } flags;
 };
 
 struct cluster {
@@ -413,7 +422,12 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, tracks *res) {
 
 // {{{2 read block
 template <> constexpr mno::req<void> read(yoyo::subreader &in, block *res) {
-  return in.seekg(0, yoyo::seek_mode::end);
+  return read_vint(in, false)
+      .map([&](auto i) { res->track = i; })
+      .fmap([&] { return in.read_s16(); })
+      .map([&](auto ts) { res->timestamp = ts; })
+      .fmap([&] { return in.read(&res->flags, 1); })
+      .fmap([&] { return in.seekg(0, yoyo::seek_mode::end); });
 }
 
 // {{{2 read cluster
@@ -571,6 +585,14 @@ constexpr static char hexdigit(unsigned n) {
         for (const auto &c : doc.body.clusters) {
           silog::log(silog::info, "Cluster @%lld (%d blocks)", c.timestamp,
                      c.blocks.size());
+          for (auto i = 0; i < 10 && i < c.blocks.size(); i++) {
+            auto &b = c.blocks[i];
+            auto key = b.flags.keyframe ? " Key" : "";
+            auto inv = b.flags.invisible ? " Inv" : "";
+            auto disc = b.flags.discardable ? " Disc" : "";
+            silog::log(silog::info, "  Block: Track=%lld TS=%d L=%d%s%s%s",
+                       b.track, b.timestamp, b.flags.lacing, key, inv, disc);
+          }
         }
       })
       .map([] { return false; })
