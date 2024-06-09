@@ -76,9 +76,12 @@ struct tracks {
   hai::varray<track> list{16};
 };
 
+struct block {
+};
+
 struct cluster {
   uint timestamp;
-  hai::varray<yoyo::subreader> blocks{8};
+  hai::varray<block> blocks{8};
 };
 
 struct segment {
@@ -408,15 +411,21 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, tracks *res) {
   });
 }
 
+// {{{2 read block
+template <> constexpr mno::req<void> read(yoyo::subreader &in, block *res) {
+  return in.seekg(0, yoyo::seek_mode::end);
+}
+
 // {{{2 read cluster
 template <> constexpr mno::req<void> read(yoyo::subreader &in, cluster *res) {
   return read_until_eof(in, [&](element &e) {
     switch (e.id) {
     case 0xE7:
       return read_attr(&res->timestamp, e);
-    case 0xA3:
-      res->blocks.push_back_doubling(e.data);
-      return mno::req<void>{};
+    case 0xA3: {
+      block b{};
+      return read_attr(&b, e).map([&] { res->blocks.push_back_doubling(b); });
+    }
     case 0xA0:
       return mno::req<void>::failed("BlockGroup TBD");
     default:
@@ -487,6 +496,7 @@ constexpr auto read_document(yoyo::reader &in) {
   }
 }
 
+#if 0
 constexpr static char hexdigit(unsigned n) {
   return n >= 10 ? ('A' + (n - 10)) : ('0' + n);
 }
@@ -512,6 +522,7 @@ constexpr static char hexdigit(unsigned n) {
   }
   return res;
 }
+#endif
 
 [[nodiscard]] static mno::req<void> dump_doc(yoyo::reader &in) {
   return read_document(in)
@@ -558,13 +569,8 @@ constexpr static char hexdigit(unsigned n) {
           }
         }
         for (const auto &c : doc.body.clusters) {
-          silog::log(silog::info, "Cluster @%ld (%d blocks)", c.timestamp,
+          silog::log(silog::info, "Cluster @%lld (%d blocks)", c.timestamp,
                      c.blocks.size());
-          auto blk = c.blocks[0];
-          blk.seekg(0, yoyo::seek_mode::set)
-              .fmap([&] { return hexdump(blk); })
-              .fmap([&] { return blk.seekg(0, yoyo::seek_mode::end); })
-              .log_error();
         }
       })
       .map([] { return false; })
