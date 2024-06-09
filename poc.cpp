@@ -86,6 +86,7 @@ struct block {
     int lacing : 2;
     bool discardable : 1;
   } flags;
+  yoyo::subreader data;
 };
 
 struct cluster {
@@ -427,6 +428,8 @@ template <> constexpr mno::req<void> read(yoyo::subreader &in, block *res) {
       .fmap([&] { return in.read_s16(); })
       .map([&](auto ts) { res->timestamp = ts; })
       .fmap([&] { return in.read(&res->flags, 1); })
+      .fmap([&] { return yoyo::subreader::create(&in); })
+      .map([&](auto r) { res->data = r; })
       .fmap([&] { return in.seekg(0, yoyo::seek_mode::end); });
 }
 
@@ -510,7 +513,6 @@ constexpr auto read_document(yoyo::reader &in) {
   }
 }
 
-#if 0
 constexpr static char hexdigit(unsigned n) {
   return n >= 10 ? ('A' + (n - 10)) : ('0' + n);
 }
@@ -524,19 +526,18 @@ constexpr static char hexdigit(unsigned n) {
       octet[1] = hexdigit(c % 16);
       line = line + jute::view{octet};
     }
-    silog::log(silog::info, "%.*s", static_cast<unsigned>((*line).size()),
+    silog::log(silog::info, "    %.*s", static_cast<unsigned>((*line).size()),
                (*line).data());
   });
 }
 
 [[nodiscard]] static mno::req<void> hexdump(yoyo::subreader r) {
-  mno::req<void> res{};
-  for (auto i = 0; i < 10 && res.is_valid(); i++) {
+  mno::req<void> res = r.seekg(0, yoyo::seek_mode::set);
+  for (auto i = 0; i < 4 && res.is_valid(); i++) {
     res = hexdump_line(r);
   }
   return res;
 }
-#endif
 
 [[nodiscard]] static mno::req<void> dump_doc(yoyo::reader &in) {
   return read_document(in)
@@ -586,12 +587,15 @@ constexpr static char hexdigit(unsigned n) {
           silog::log(silog::info, "Cluster @%lld (%d blocks)", c.timestamp,
                      c.blocks.size());
           for (auto i = 0; i < 10 && i < c.blocks.size(); i++) {
-            auto &b = c.blocks[i];
+            auto b = c.blocks[i];
+            auto sz = b.data.size().unwrap(0);
             auto key = b.flags.keyframe ? " Key" : "";
             auto inv = b.flags.invisible ? " Inv" : "";
             auto disc = b.flags.discardable ? " Disc" : "";
-            silog::log(silog::info, "  Block: Track=%lld TS=%d L=%d%s%s%s",
-                       b.track, b.timestamp, b.flags.lacing, key, inv, disc);
+            silog::log(silog::info,
+                       "  Block: Track=%lld TS=%d L=%d Sz=%d%s%s%s", b.track,
+                       b.timestamp, b.flags.lacing, sz, key, inv, disc);
+            hexdump(b.data).log_error();
           }
         }
       })
