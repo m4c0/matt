@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
-#define ASSERT(x, ...) if (!(x)) { ERR(__VA_ARGS__); return 0; }
+#define ASSERT(x, ...) do { if (!(x)) { ERR(__VA_ARGS__); return 0; } } while (0)
 
 int read(FILE * f, void * res) {
   ASSERT(fread(res, 1, 1, f), "error reading byte");
@@ -63,9 +63,31 @@ int check_u8(FILE * f, uint8_t v) {
   return 1;
 }
 
-int run_track(FILE * f, uint64_t trk_sz) {
+int run_track_entry(FILE * f, uint64_t trk_sz) {
   long trk_end = ftell(f) + trk_sz;
-  ASSERT(0 <= fseek(f, trk_sz, SEEK_CUR), " skipping unused element");
+  while (ftell(f) < trk_end) {
+    uint64_t elid, hdr_sz;
+    ASSERT(element(f, &elid, &hdr_sz), " reading track entry element");
+    if (elid == 0x83) {
+      ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", trk_sz);
+
+      uint8_t val;
+      ASSERT(read(f, &val), " reading value");
+      if (val == 2) puts("this is audio");
+      else fseek(f, trk_end, SEEK_SET); // Skip other tracks
+    } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track entry element");
+  }
+  return 1;
+}
+
+int run_tracks(FILE * f, uint64_t trk_sz) {
+  long trk_end = ftell(f) + trk_sz;
+  while (ftell(f) < trk_end) {
+    uint64_t elid, hdr_sz;
+    ASSERT(element(f, &elid, &hdr_sz), " reading track element");
+    if (elid == 0xAE) ASSERT(run_track_entry(f, hdr_sz), ""); // Track Entry
+    else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track element");
+  }
   return 1;
 }
 
@@ -106,12 +128,8 @@ int run(const char * name) {
   while (ftell(f) < seg_end) {
     uint64_t elid;
     ASSERT(element(f, &elid, &hdr_sz), " reading segment element");
-    switch (elid) {
-      case 0x1654ae6b: ASSERT(run_track(f, hdr_sz), ""); break; // Tracks
-      default:
-        ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
-        break;
-    }
+    if (elid == 0x1654ae6b) ASSERT(run_tracks(f, hdr_sz), ""); // Tracks
+    else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
   }
   return 1;
 }
