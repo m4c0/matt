@@ -9,29 +9,25 @@ int read(FILE * f, void * res) {
   ASSERT(fread(res, 1, 1, f), "error reading byte");
   return 1;
 }
+int octet_count(uint64_t n) {
+  int res = 1;
+  while ((n & 0x80) == 0 && n != 0) {
+    n <<= 1;
+    res++;
+  }
+  return res;
+}
 int vint_raw(FILE * f, uint64_t * res, int id) {
   *res = 0;
   ASSERT(read(f, res), " 1 of vint");
 
-  unsigned len = 0;
-  if (*res & 0x80) {
-    if (!id) *res &= 0x7f;
-  } else if (*res & 0x40) {
-    if (!id) *res &= 0x3f;
-    len = 1;
-  } else if (*res & 0x20) {
-    if (!id) *res &= 0x1f;
-    len = 2;
-  } else if (*res & 0x10) {
-    if (!id) *res &= 0x0f;
-    len = 3;
-  } else {
-    ASSERT(*res & 0x08, "invalid byte 1 of vint");
-    if (!id) *res &= 0x07;
-    len = 4;
-  }
+  unsigned len = octet_count(*res);
+  ASSERT(len > 0 && len <= 8, "invalid octec count (%d)", len);
 
-  for (unsigned i = 0; i < len; i++) {
+  unsigned mask = 0x80 >> (len - 1);
+  if (!id) *res ^= mask;
+
+  for (unsigned i = 1; i < len; i++) {
     *res <<= 8;
     ASSERT(read(f, res), " of vint");
   }
