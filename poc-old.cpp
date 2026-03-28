@@ -1,4 +1,4 @@
-#pragma leco tool
+//#pragma leco tool
 import hai;
 import hashley;
 import jute;
