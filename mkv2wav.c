@@ -36,20 +36,22 @@ int vint_raw(FILE * f, uint64_t * res, int id) {
 }
 int vint(FILE * f, uint64_t * res) { return vint_raw(f, res, 0); }
 
-int element(FILE * f, uint64_t exp_elid, uint64_t * elsz) {
-  uint64_t elid;
-
-  ASSERT(vint_raw(f, &elid, 1), " reading Element ID");
-  ASSERT(elid && ~elid, "Element ID cannot have all zeroes or all ones");
-  ASSERT(elid == exp_elid, "Invalid element ID (exp %llx got %llx)", exp_elid, elid);
-
+int element(FILE * f, uint64_t * elid, uint64_t * elsz) {
+  ASSERT(vint_raw(f, elid, 1), " reading Element ID");
+  ASSERT(*elid && ~*elid, "Element ID cannot have all zeroes or all ones");
   ASSERT(vint(f, elsz), " reading Element Data Size");
   ASSERT(~*elsz, "Element Data Size cannot have all ones");
   return 1;
 }
+int check_element(FILE * f, uint64_t exp_elid, uint64_t * elsz) {
+  uint64_t elid;
+  ASSERT(element(f, &elid, elsz), "");
+  ASSERT(elid == exp_elid, "Invalid element ID (exp %llx got %llx)", exp_elid, elid);
+  return 1;
+}
 int element_sized(FILE * f, uint64_t exp_elid, uint64_t exp_elsz) {
   uint64_t elsz;
-  ASSERT(element(f, exp_elid, &elsz), "");
+  ASSERT(check_element(f, exp_elid, &elsz), "");
   ASSERT(elsz == exp_elsz, "Invalid element data size (exp %lld got %lld)", exp_elsz, elsz);
   return 1;
 }
@@ -61,12 +63,18 @@ int check_u8(FILE * f, uint8_t v) {
   return 1;
 }
 
+int run_track(FILE * f, uint64_t trk_sz) {
+  long trk_end = ftell(f) + trk_sz;
+  ASSERT(0 <= fseek(f, trk_sz, SEEK_CUR), " skipping unused element");
+  return 1;
+}
+
 int run(const char * name) {
   FILE * f = fopen(name, "rb");
   ASSERT(f, "file not found");
 
   uint64_t hdr_sz;
-  ASSERT(element(f, 0x1A45DFA3, &hdr_sz), " reading EBML Element ID");
+  ASSERT(check_element(f, 0x1A45DFA3, &hdr_sz), " reading EBML Element ID");
   long l = ftell(f);
 
   ASSERT(element_sized(f, 0x4286, 1), " reading EBML Version ID");
@@ -79,7 +87,7 @@ int run(const char * name) {
   ASSERT(check_u8(f, 8), " of EBML Max Size Length");
 
   uint64_t len;
-  ASSERT(element(f, 0x4282, &len), " reading DocType");
+  ASSERT(check_element(f, 0x4282, &len), " reading DocType");
   ASSERT(len == 8, "Invalid DocType length (exp 8 got %lld)", len);
   char buf[8];
   ASSERT(fread(buf, 8, 1, f), "Error reading DocType");
@@ -92,8 +100,19 @@ int run(const char * name) {
 
   ASSERT(hdr_sz == ftell(f) - l, "Unsupported elements in EBML Header");
 
-  ASSERT(element(f, 0x18538067, &hdr_sz), " reading Segment");
+  ASSERT(check_element(f, 0x18538067, &hdr_sz), " reading Segment");
+  long seg_end = ftell(f) + hdr_sz;
 
+  while (ftell(f) < seg_end) {
+    uint64_t elid;
+    ASSERT(element(f, &elid, &hdr_sz), " reading segment element");
+    switch (elid) {
+      case 0x1654ae6b: ASSERT(run_track(f, hdr_sz), ""); break; // Tracks
+      default:
+        ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
+        break;
+    }
+  }
   return 1;
 }
 
