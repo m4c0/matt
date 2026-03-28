@@ -4,9 +4,13 @@
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
 #define ASSERT(x, ...) if (!(x)) { ERR(__VA_ARGS__); return 0; }
 
-int vint(FILE * f, uint64_t * res, int id) {
+int read(FILE * f, void * res) {
+  ASSERT(fread(res, 1, 1, f), "error reading byte");
+  return 1;
+}
+int vint_raw(FILE * f, uint64_t * res, int id) {
   *res = 0;
-  ASSERT(fread(res, 1, 1, f), "error reading byte 1 of vint");
+  ASSERT(read(f, res), " 1 of vint");
 
   unsigned len = 0;
   if (*res & 0x80) {
@@ -28,9 +32,27 @@ int vint(FILE * f, uint64_t * res, int id) {
 
   for (unsigned i = 0; i < len; i++) {
     *res <<= 8;
-    ASSERT(fread(res, 1, 1, f), "error reading bytes 2 of vint");
+    ASSERT(read(f, res), " of vint");
   }
 
+  return 1;
+}
+int vint(FILE * f, uint64_t * res) { return vint_raw(f, res, 0); }
+
+int element(FILE * f, uint64_t exp_elid) {
+  uint64_t elid, elsz;
+  ASSERT(vint_raw(f, &elid, 1), " reading Element ID");
+  ASSERT(elid && ~elid, "Element ID cannot have all zeroes or all ones");
+  ASSERT(vint(f, &elsz), " reading Element Data Size");
+  ASSERT(~elid, "Element Data Size cannot have all ones");
+  ASSERT(elid == exp_elid, "Invalid Element ID");
+  return 1;
+}
+
+int check_u8(FILE * f, uint8_t v) {
+  uint8_t val;
+  ASSERT(read(f, &val), " reading value");
+  ASSERT(val == v, "Unsupported value (expecting %d got %d)", v, val);
   return 1;
 }
 
@@ -38,14 +60,19 @@ int run(const char * name) {
   FILE * f = fopen(name, "rb");
   ASSERT(f, "file not found");
 
-  uint64_t elid;
-  ASSERT(vint(f, &elid, 1), " reading Element ID");
-  ASSERT(elid && ~elid, "Element ID cannot have all zeroes or all ones");
-  uint64_t elsz;
-  ASSERT(vint(f, &elsz, 0), " reading Element Data Size");
-  ASSERT(~elid, "Element Data Size cannot have all ones");
+  ASSERT(element(f, 0x1A45DFA3), " reading EBML Element ID");
+  ASSERT(element(f, 0x4286), " reading EBML Version ID");
+  ASSERT(check_u8(f, 1), " of EBML Version ID");
 
-  printf("%llx %lld\n", elid, elsz);
+  ASSERT(element(f, 0x42F7), " reading EBML Read Version ID");
+  ASSERT(check_u8(f, 1), " of EBML Read Version ID");
+
+  ASSERT(element(f, 0x42F2), " reading EBML Max ID Length");
+  ASSERT(check_u8(f, 4), " of EBML Max ID Length");
+
+  ASSERT(element(f, 0x42F3), " reading EBML Max Size Length");
+  ASSERT(check_u8(f, 8), " of EBML Max Size Length");
+
   return 1;
 }
 
