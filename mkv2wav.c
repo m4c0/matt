@@ -4,36 +4,33 @@
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
 #define ASSERT(x, ...) if (!(x)) { ERR(__VA_ARGS__); return 0; }
 
-int vint(FILE * f, uint64_t * res) {
+int vint(FILE * f, uint64_t * res, int id) {
+  *res = 0;
   ASSERT(fread(res, 1, 1, f), "error reading byte 1 of vint");
+
+  unsigned len = 0;
   if (*res & 0x80) {
-    *res &= 0x7f;
-    return 1;
+    if (!id) *res &= 0x7f;
+  } else if (*res & 0x40) {
+    if (!id) *res &= 0x3f;
+    len = 1;
+  } else if (*res & 0x20) {
+    if (!id) *res &= 0x1f;
+    len = 2;
+  } else if (*res & 0x10) {
+    if (!id) *res &= 0x0f;
+    len = 3;
+  } else {
+    ASSERT(*res & 0x08, "invalid byte 1 of vint");
+    if (!id) *res &= 0x07;
+    len = 4;
   }
-  if (*res & 0x40) {
-    *res &= 0x3f;
+
+  for (unsigned i = 0; i < len; i++) {
     *res <<= 8;
-    ASSERT(fread(res, 1, 1, f), "error reading byte 2 of vint");
-    return 1;
-  }
-  if (*res & 0x20) {
-    *res &= 0x1f;
-    *res <<= 16;
-    ASSERT(fread(res, 2, 1, f), "error reading bytes 2 and 3 of vint");
-    return 1;
-  }
-  if (*res & 0x10) {
-    *res &= 0x0f;
-    *res <<= 24;
-    ASSERT(fread(res, 3, 1, f), "error reading bytes 2 thru 4 of vint");
-    return 1;
+    ASSERT(fread(res, 1, 1, f), "error reading bytes 2 of vint");
   }
 
-  ASSERT(*res & 0x08, "invalid byte 1 of vint");
-
-  *res &= 0x07;
-  *res <<= 32;
-  ASSERT(fread(res, 4, 1, f), "error reading bytes 2 thru 5 of vint");
   return 1;
 }
 
@@ -42,9 +39,13 @@ int run(const char * name) {
   ASSERT(f, "file not found");
 
   uint64_t elid;
-  ASSERT(vint(f, &elid), " reading Element ID");
+  ASSERT(vint(f, &elid, 1), " reading Element ID");
+  ASSERT(elid && ~elid, "Element ID cannot have all zeroes or all ones");
+  uint64_t elsz;
+  ASSERT(vint(f, &elsz, 0), " reading Element Data Size");
+  ASSERT(~elid, "Element Data Size cannot have all ones");
 
-  printf("%llx\n", elid);
+  printf("%llx %lld\n", elid, elsz);
   return 1;
 }
 
