@@ -1,16 +1,17 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
 #define ASSERT(x, ...) do { if (!(x)) { ERR(__VA_ARGS__); return 0; } } while (0)
 
-int read(FILE * f, void * res) {
+static int read(FILE * f, void * res) {
   ASSERT(fread(res, 1, 1, f), "error reading byte");
   return 1;
 }
-int octet_count(uint64_t n) {
+static int octet_count(uint64_t n) {
   int res = 1;
   while ((n & 0x80) == 0 && n != 0) {
     n <<= 1;
@@ -18,7 +19,7 @@ int octet_count(uint64_t n) {
   }
   return res;
 }
-int vint_raw(FILE * f, uint64_t * res, int id) {
+static int vint_raw(FILE * f, uint64_t * res, int id) {
   *res = 0;
   ASSERT(read(f, res), " 1 of vint");
 
@@ -35,36 +36,36 @@ int vint_raw(FILE * f, uint64_t * res, int id) {
 
   return 1;
 }
-int vint(FILE * f, uint64_t * res) { return vint_raw(f, res, 0); }
+static int vint(FILE * f, uint64_t * res) { return vint_raw(f, res, 0); }
 
-int element(FILE * f, uint64_t * elid, uint64_t * elsz) {
+static int element(FILE * f, uint64_t * elid, uint64_t * elsz) {
   ASSERT(vint_raw(f, elid, 1), " reading Element ID");
   ASSERT(*elid && ~*elid, "Element ID cannot have all zeroes or all ones");
   ASSERT(vint(f, elsz), " reading Element Data Size");
   ASSERT(~*elsz, "Element Data Size cannot have all ones");
   return 1;
 }
-int check_element(FILE * f, uint64_t exp_elid, uint64_t * elsz) {
+static int check_element(FILE * f, uint64_t exp_elid, uint64_t * elsz) {
   uint64_t elid;
   ASSERT(element(f, &elid, elsz), "");
   ASSERT(elid == exp_elid, "Invalid element ID (exp %llx got %llx)", exp_elid, elid);
   return 1;
 }
-int element_sized(FILE * f, uint64_t exp_elid, uint64_t exp_elsz) {
+static int element_sized(FILE * f, uint64_t exp_elid, uint64_t exp_elsz) {
   uint64_t elsz;
   ASSERT(check_element(f, exp_elid, &elsz), "");
   ASSERT(elsz == exp_elsz, "Invalid element data size (exp %lld got %lld)", exp_elsz, elsz);
   return 1;
 }
 
-int check_u8(FILE * f, uint8_t v) {
+static int check_u8(FILE * f, uint8_t v) {
   uint8_t val;
   ASSERT(read(f, &val), " reading value");
   ASSERT(val == v, "Unsupported value (expecting %d got %d)", v, val);
   return 1;
 }
 
-int run_audio(FILE * f, uint64_t sz) {
+static int run_audio(FILE * f, uint64_t sz) {
   long end = ftell(f) + sz;
   while (ftell(f) < end) {
     uint64_t elid, hdr_sz;
@@ -89,7 +90,7 @@ int run_audio(FILE * f, uint64_t sz) {
   return 1;
 }
 
-int run_track_entry(FILE * f, uint64_t trk_sz) {
+static int run_track_entry(FILE * f, uint64_t trk_sz) {
   long trk_end = ftell(f) + trk_sz;
   while (ftell(f) < trk_end) {
     uint64_t elid, hdr_sz;
@@ -108,7 +109,7 @@ int run_track_entry(FILE * f, uint64_t trk_sz) {
   return 1;
 }
 
-int run_tracks(FILE * f, uint64_t trk_sz) {
+static int run_tracks(FILE * f, uint64_t trk_sz) {
   long trk_end = ftell(f) + trk_sz;
   while (ftell(f) < trk_end) {
     uint64_t elid, hdr_sz;
@@ -119,7 +120,7 @@ int run_tracks(FILE * f, uint64_t trk_sz) {
   return 1;
 }
 
-int run(const char * name) {
+static int run(const char * name) {
   FILE * f = fopen(name, "rb");
   ASSERT(f, "file not found");
 
