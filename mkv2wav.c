@@ -58,6 +58,16 @@ static int element_sized(FILE * f, uint64_t exp_elid, uint64_t exp_elsz) {
   return 1;
 }
 
+static int read_str(FILE * f, char ** str, uint64_t len) {
+  char * buf = *str = malloc(len + 1);
+  ASSERT(buf, "Out-of-memory");
+
+  ASSERT(fread(buf, len, 1, f), "Error reading string");
+  
+  buf[len] = 0;
+  return 1;
+}
+
 static int check_u8(FILE * f, uint8_t v) {
   uint8_t val;
   ASSERT(read(f, &val), " reading value");
@@ -139,10 +149,9 @@ static int run(const char * name) {
 
   uint64_t len;
   ASSERT(check_element(f, 0x4282, &len), " reading DocType");
-  ASSERT(len == 8, "Invalid DocType length (exp 8 got %lld)", len);
-  char buf[8];
-  ASSERT(fread(buf, 8, 1, f), "Error reading DocType");
-  ASSERT(0 == strncmp(buf, "matroska", 8), "Invalid DocType (exp 'matroska' got '%8s')", buf);
+  char * buf;
+  ASSERT(read_str(f, &buf, len), " for DocType");
+  ASSERT(0 == strncmp(buf, "matroska", len), "Invalid DocType (exp 'matroska' got '%8s')", buf);
 
   ASSERT(element_sized(f, 0x4287, 1), " reading DocType Version ID");
   ASSERT(check_u8(f, 4), " of DocType Version ID");
