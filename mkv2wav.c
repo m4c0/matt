@@ -7,6 +7,18 @@
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
 #define ASSERT(x, ...) do { if (!(x)) { ERR(__VA_ARGS__); return 0; } } while (0)
 
+typedef struct track {
+  uint8_t id;
+  uint8_t type;
+  char * codec;
+
+  double sample_rate;
+  uint8_t channels;
+  uint8_t bit_depth;
+
+  struct track * next;
+} track_t;
+
 static int read(FILE * f, void * res) {
   ASSERT(fread(res, 1, 1, f), "error reading byte");
   return 1;
@@ -74,7 +86,7 @@ static int check_u8(FILE * f, uint8_t v) {
   return 1;
 }
 
-static int run_audio(FILE * f, uint64_t sz) {
+static int run_audio(FILE * f, uint64_t sz, track_t * t) {
   long end = ftell(f) + sz;
   while (ftell(f) < end) {
     uint64_t elid, hdr_sz;
@@ -87,30 +99,18 @@ static int run_audio(FILE * f, uint64_t sz) {
         double f;
       } smp;
       for (int i = 0; i < 8; i++) ASSERT(fread(smp.u + 7 - i, 1, 1, f), "Error reading byte %d of sampling frequency", i + 1);
-      printf("sample rate: %lf\n", smp.f);
+      t->sample_rate = smp.f;
     } else if (elid == 0x9F) { // Channels
       ASSERT(hdr_sz == 1, "Invalid channels size (%lld)", hdr_sz);
-
-      uint8_t val;
-      ASSERT(read(f, &val), " reading channels");
-      printf("channels: %d\n", val);
+      ASSERT(read(f, &t->channels), " reading channels");
     } else if (elid == 0x6264) { // Bit Depth
       ASSERT(hdr_sz == 1, "Invalid bit depth size (%lld)", hdr_sz);
-
-      uint8_t val;
-      ASSERT(read(f, &val), " reading bit depth");
-      printf("bit depth: %d\n", val);
+      ASSERT(read(f, &t->bit_depth), " reading bit depth");
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused audio element");
   }
   return 1;
 }
 
-typedef struct track {
-  uint8_t id;
-  uint8_t type;
-  char * codec;
-  struct track * next;
-} track_t;
 static track_t * run_track_entry(FILE * f, uint64_t trk_sz) {
   track_t * res = malloc(sizeof(track_t));
   *res = (track_t){0};
@@ -132,7 +132,7 @@ static track_t * run_track_entry(FILE * f, uint64_t trk_sz) {
       ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", hdr_sz);
       ASSERT(read(f, &res->id), " reading track ID");
     } else if (elid == 0xE1) { // Audio
-      ASSERT(run_audio(f, hdr_sz), " reading audio data");
+      ASSERT(run_audio(f, hdr_sz, res), " reading audio data");
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track entry element");
   }
   return res;
@@ -231,12 +231,15 @@ static int run(const char * name) {
     else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
   }
 
-  while (trks) {
-    printf("track: id=%d type=%d codec=%s\n",
+  for (; trks; trks = trks->next) {
+    if (!trks->type) continue;
+    printf("track: id=%d type=%d codec=%s smp=%.0f ch=%d bd=%d\n",
         trks->id,
         trks->type,
-        trks->codec);
-    trks = trks->next;
+        trks->codec,
+        trks->sample_rate,
+        trks->channels,
+        trks->bit_depth);
   }
   return 1;
 }
