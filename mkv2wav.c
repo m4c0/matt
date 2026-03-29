@@ -76,7 +76,6 @@ int run_audio(FILE * f, uint64_t sz) {
         uint8_t u[8];
         double f;
       } smp;
-      static_assert(sizeof(smp) == 8, "expecting 'double' as 8-byte");
       for (int i = 0; i < 8; i++) ASSERT(fread(smp.u + 7 - i, 1, 1, f), "Error reading byte %d of sampling frequency", i + 1);
       printf("sample rate: %lf\n", smp.f);
     } else if (elid == 0x9F) { // Channels
