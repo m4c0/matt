@@ -58,10 +58,12 @@ static int element_sized(FILE * f, uint64_t exp_elid, uint64_t exp_elsz) {
   return 1;
 }
 
+// TODO: return char *
 static int read_str(FILE * f, char ** str, uint64_t len) {
-  char * buf = *str = malloc(len);
+  char * buf = *str = malloc(len + 1);
   ASSERT(buf, "Out-of-memory");
   ASSERT(fread(buf, len, 1, f), "Error reading string");
+  buf[len] = 0;
   return 1;
 }
 
@@ -103,44 +105,54 @@ static int run_audio(FILE * f, uint64_t sz) {
   return 1;
 }
 
-static int run_track_entry(FILE * f, uint64_t trk_sz) {
+typedef struct track {
+  uint8_t id;
+  uint8_t type;
+  char * codec;
+  struct track * next;
+} track_t;
+static track_t * run_track_entry(FILE * f, uint64_t trk_sz) {
+  track_t * res = malloc(sizeof(track_t));
+  *res = (track_t){0};
+
   long trk_end = ftell(f) + trk_sz;
   while (ftell(f) < trk_end) {
     uint64_t elid, hdr_sz;
     ASSERT(element(f, &elid, &hdr_sz), " reading track entry element");
     if (elid == 0x83) { // Track Type
       ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", hdr_sz);
-
-      uint8_t val;
-      ASSERT(read(f, &val), " reading value");
-      if (val == 2) puts("this is audio");
-      else ASSERT(0 <= fseek(f, trk_end, SEEK_SET), " skipping non-audio track");
+      ASSERT(read(f, &res->type), " reading track type");
+      if (res->type != 2) {
+        ASSERT(0 <= fseek(f, trk_end, SEEK_SET), " skipping non-audio track");
+        *res = (track_t){0};
+      }
     } else if (elid == 0x86) { // Codec ID
-      char * buf;
-      ASSERT(read_str(f, &buf, hdr_sz), " reading codec ID");
-      printf("codec: %.*s\n", (int)hdr_sz, buf);
+      ASSERT(read_str(f, &res->codec, hdr_sz), " reading codec ID");
     } else if (elid == 0xD7) { // Track ID
       ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", hdr_sz);
-
-      uint8_t val;
-      ASSERT(read(f, &val), " reading track ID");
-      printf("track id: %d\n", val);
+      ASSERT(read(f, &res->id), " reading track ID");
     } else if (elid == 0xE1) { // Audio
       ASSERT(run_audio(f, hdr_sz), " reading audio data");
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track entry element");
   }
-  return 1;
+  return res;
 }
 
-static int run_tracks(FILE * f, uint64_t trk_sz) {
+static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
+  track_t * res = NULL;
   long trk_end = ftell(f) + trk_sz;
   while (ftell(f) < trk_end) {
     uint64_t elid, hdr_sz;
     ASSERT(element(f, &elid, &hdr_sz), " reading track element");
-    if (elid == 0xAE) ASSERT(run_track_entry(f, hdr_sz), ""); // Track Entry
+    if (elid == 0xAE) { // Track Entry
+      track_t * t;
+      ASSERT(t = run_track_entry(f, hdr_sz), "");
+      t->next = res;
+      res = t;
+    }
     else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track element");
   }
-  return 1;
+  return res;
 }
 
 static int run_simple_block(FILE * f, uint64_t blk_sz) {
@@ -159,7 +171,7 @@ static int run_simple_block(FILE * f, uint64_t blk_sz) {
   uint8_t first;
   ASSERT(fread(&first, 1, 1, f), "Error reading byte"); 
 
-  printf("track: %lld - ts: %d - flg: %x - rem: %ld - next: %x\n", trk_no, ts, flg, blk_end - ftell(f), (first & 0xFF));
+  // printf("track: %lld - ts: %d - flg: %x - rem: %ld - next: %x\n", trk_no, ts, flg, blk_end - ftell(f), (first & 0xFF));
 
   ASSERT(0 <= fseek(f, blk_end, SEEK_SET), "");
   return 1;
@@ -210,12 +222,21 @@ static int run(const char * name) {
   ASSERT(check_element(f, 0x18538067, &hdr_sz), " reading Segment");
   long seg_end = ftell(f) + hdr_sz;
 
+  track_t * trks = NULL;
   while (ftell(f) < seg_end) {
     uint64_t elid;
     ASSERT(element(f, &elid, &hdr_sz), " reading segment element");
-    if (elid == 0x1654ae6b) ASSERT(run_tracks(f, hdr_sz), ""); // Tracks
+    if (elid == 0x1654ae6b) ASSERT(trks = run_tracks(f, hdr_sz), ""); // Tracks
     else if (elid == 0x1F43B675) ASSERT(run_cluster(f, hdr_sz), ""); // Cluster
     else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
+  }
+
+  while (trks) {
+    printf("track: id=%d type=%d codec=%s\n",
+        trks->id,
+        trks->type,
+        trks->codec);
+    trks = trks->next;
   }
   return 1;
 }
