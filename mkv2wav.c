@@ -64,18 +64,40 @@ int check_u8(FILE * f, uint8_t v) {
   return 1;
 }
 
+int run_audio(FILE * f, uint64_t sz) {
+  long end = ftell(f) + sz;
+  while (ftell(f) < end) {
+    uint64_t elid, hdr_sz;
+    ASSERT(element(f, &elid, &hdr_sz), " reading audio element");
+    if (elid == 0xB5) { // Sampling Frequency
+      ASSERT(hdr_sz == 8, "Invalid sample frequency size (%lld)", hdr_sz);
+
+      union {
+        uint8_t u[8];
+        double f;
+      } smp;
+      static_assert(sizeof(smp) == 8, "expecting 'double' as 8-byte");
+      for (int i = 0; i < 8; i++) ASSERT(fread(smp.u + 7 - i, 1, 1, f), "Error reading byte %d of sampling frequency", i + 1);
+      printf("sample rate: %lf\n", smp.f);
+    } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused audio element");
+  }
+  return 1;
+}
+
 int run_track_entry(FILE * f, uint64_t trk_sz) {
   long trk_end = ftell(f) + trk_sz;
   while (ftell(f) < trk_end) {
     uint64_t elid, hdr_sz;
     ASSERT(element(f, &elid, &hdr_sz), " reading track entry element");
-    if (elid == 0x83) {
-      ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", trk_sz);
+    if (elid == 0x83) { // Track Type
+      ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", hdr_sz);
 
       uint8_t val;
       ASSERT(read(f, &val), " reading value");
       if (val == 2) puts("this is audio");
-      else fseek(f, trk_end, SEEK_SET); // Skip other tracks
+      else ASSERT(0 <= fseek(f, trk_end, SEEK_SET), " skipping non-audio track");
+    } else if (elid == 0xE1) { // Audio
+      ASSERT(run_audio(f, hdr_sz), " reading audio data");
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track entry element");
   }
   return 1;
