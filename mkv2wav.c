@@ -59,12 +59,9 @@ static int element_sized(FILE * f, uint64_t exp_elid, uint64_t exp_elsz) {
 }
 
 static int read_str(FILE * f, char ** str, uint64_t len) {
-  char * buf = *str = malloc(len + 1);
+  char * buf = *str = malloc(len);
   ASSERT(buf, "Out-of-memory");
-
   ASSERT(fread(buf, len, 1, f), "Error reading string");
-  
-  buf[len] = 0;
   return 1;
 }
 
@@ -112,6 +109,10 @@ static int run_track_entry(FILE * f, uint64_t trk_sz) {
       ASSERT(read(f, &val), " reading value");
       if (val == 2) puts("this is audio");
       else ASSERT(0 <= fseek(f, trk_end, SEEK_SET), " skipping non-audio track");
+    } else if (elid == 0x86) { // Codec ID
+      char * buf;
+      ASSERT(read_str(f, &buf, hdr_sz), " reading codec ID");
+      printf("%.*s\n", (int)hdr_sz, buf);
     } else if (elid == 0xE1) { // Audio
       ASSERT(run_audio(f, hdr_sz), " reading audio data");
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track entry element");
