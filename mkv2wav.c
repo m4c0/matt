@@ -92,6 +92,12 @@ static int run_audio(FILE * f, uint64_t sz) {
       uint8_t val;
       ASSERT(read(f, &val), " reading channels");
       printf("channels: %d\n", val);
+    } else if (elid == 0x6264) { // Bit Depth
+      ASSERT(hdr_sz == 1, "Invalid bit depth size (%lld)", hdr_sz);
+
+      uint8_t val;
+      ASSERT(read(f, &val), " reading bit depth");
+      printf("bit depth: %d\n", val);
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused audio element");
   }
   return 1;
