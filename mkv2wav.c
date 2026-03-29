@@ -79,6 +79,12 @@ int run_audio(FILE * f, uint64_t sz) {
       static_assert(sizeof(smp) == 8, "expecting 'double' as 8-byte");
       for (int i = 0; i < 8; i++) ASSERT(fread(smp.u + 7 - i, 1, 1, f), "Error reading byte %d of sampling frequency", i + 1);
       printf("sample rate: %lf\n", smp.f);
+    } else if (elid == 0x9F) { // Channels
+      ASSERT(hdr_sz == 1, "Invalid channels size (%lld)", hdr_sz);
+
+      uint8_t val;
+      ASSERT(read(f, &val), " reading channels");
+      printf("channels: %d\n", val);
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused audio element");
   }
   return 1;
