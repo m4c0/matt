@@ -174,6 +174,10 @@ static int run(const char * name) {
     uint64_t elid;
     ASSERT(element(f, &elid, &hdr_sz), " reading segment element");
     if (elid == 0x1654ae6b) ASSERT(run_tracks(f, hdr_sz), ""); // Tracks
+    else if (elid == 0x1F43B675) { // Cluster
+      puts("Cluster");
+      ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
+    }
     else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
   }
   return 1;
