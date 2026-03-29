@@ -155,7 +155,7 @@ static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
   return res;
 }
 
-static int run_simple_block(FILE * f, uint64_t blk_sz) {
+static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   long blk_end = ftell(f) + blk_sz;
 
   uint64_t trk_no;
@@ -171,19 +171,22 @@ static int run_simple_block(FILE * f, uint64_t blk_sz) {
   uint8_t first;
   ASSERT(fread(&first, 1, 1, f), "Error reading byte"); 
 
-  // printf("track: %lld - ts: %d - flg: %x - rem: %ld - next: %x\n", trk_no, ts, flg, blk_end - ftell(f), (first & 0xFF));
+  for (; trks && trks->id != trk_no; trks = trks->next) {}
+  if (trks) {
+    //printf("track: %lld - ts: %d - flg: %x - rem: %ld - next: %x\n", trk_no, ts, flg, blk_end - ftell(f), (first & 0xFF));
+  }
 
   ASSERT(0 <= fseek(f, blk_end, SEEK_SET), "");
   return 1;
 }
 
-static int run_cluster(FILE * f, uint64_t cls_sz) {
+static int run_cluster(FILE * f, uint64_t cls_sz, track_t * trks) {
   long cls_end = ftell(f) + cls_sz;
   while (ftell(f) < cls_end) {
     uint64_t elid, hdr_sz;
     ASSERT(element(f, &elid, &hdr_sz), " reading cluster element");
     ASSERT(0xA0 != elid, "Block Group TODO");
-    if (elid == 0xA3) ASSERT(run_simple_block(f, hdr_sz), " reading block"); 
+    if (elid == 0xA3) ASSERT(run_simple_block(f, hdr_sz, trks), " reading block"); 
     else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track element");
   }
   return 1;
@@ -227,7 +230,7 @@ static int run(const char * name) {
     uint64_t elid;
     ASSERT(element(f, &elid, &hdr_sz), " reading segment element");
     if (elid == 0x1654ae6b) ASSERT(trks = run_tracks(f, hdr_sz), ""); // Tracks
-    else if (elid == 0x1F43B675) ASSERT(run_cluster(f, hdr_sz), ""); // Cluster
+    else if (elid == 0x1F43B675) ASSERT(run_cluster(f, hdr_sz, trks), ""); // Cluster
     else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused element");
   }
 
