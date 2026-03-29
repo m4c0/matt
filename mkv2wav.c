@@ -112,7 +112,13 @@ static int run_track_entry(FILE * f, uint64_t trk_sz) {
     } else if (elid == 0x86) { // Codec ID
       char * buf;
       ASSERT(read_str(f, &buf, hdr_sz), " reading codec ID");
-      printf("%.*s\n", (int)hdr_sz, buf);
+      printf("codec: %.*s\n", (int)hdr_sz, buf);
+    } else if (elid == 0xD7) { // Track ID
+      ASSERT(hdr_sz == 1, "Invalid track type size (%lld)", hdr_sz);
+
+      uint8_t val;
+      ASSERT(read(f, &val), " reading track ID");
+      printf("track id: %d\n", val);
     } else if (elid == 0xE1) { // Audio
       ASSERT(run_audio(f, hdr_sz), " reading audio data");
     } else ASSERT(0 <= fseek(f, hdr_sz, SEEK_CUR), " skipping unused track entry element");
