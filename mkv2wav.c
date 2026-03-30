@@ -155,6 +155,41 @@ static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
   return res;
 }
 
+typedef struct opus {
+  const char * blk;
+  const char * end;
+} opus_t;
+static uint8_t opus_next(opus_t * o) {
+  return o->blk >= o->end ? 0 : *o->blk++;
+}
+
+#define _2xx23 (1 << 23)
+static int opus_dec_norm(opus_t * o, unsigned * rng, uint8_t * last) { // 4.1.2.1
+  if (*rng > _2xx23) return 1;
+
+  *rng <<= 8;
+
+  //uint8_t next = opus_next(o);
+
+  return 1;
+}
+static int opus_decode(opus_t * o) {
+  // TOC (3.1) CELT FB (48kHz) 20ms, Stereo, 1 frame per packet
+  uint8_t toc = opus_next(o);
+  ASSERT(toc == 0xFC, "Unsupported frame type (found %x)", toc);
+
+  uint8_t b0 = opus_next(o);
+
+  unsigned rng = 128; // 4.1.1
+  unsigned val = 127 - (b0 >> 1);
+
+  ASSERT(opus_dec_norm(o, &rng, &b0), " renormalising");
+
+  printf("%x %x %d\n", rng, val, b0 & 1);
+
+  return 1;
+}
+
 static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   long blk_end = ftell(f) + blk_sz;
 
@@ -168,15 +203,19 @@ static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   ASSERT(fread(&flg, 1, 1, f), "Error reading flags"); 
   ASSERT((flg | 0x80) == 0x80, "Unsupported flags");
 
-  uint8_t first;
-  ASSERT(fread(&first, 1, 1, f), "Error reading byte"); 
-
   for (; trks && trks->id != trk_no; trks = trks->next) {}
-  if (trks) {
-    //printf("track: %lld - ts: %d - flg: %x - rem: %ld - next: %x\n", trk_no, ts, flg, blk_end - ftell(f), (first & 0xFF));
+  if (!trks) {
+    ASSERT(0 <= fseek(f, blk_end, SEEK_SET), "");
+    return 1;
   }
 
-  ASSERT(0 <= fseek(f, blk_end, SEEK_SET), "");
+  long frm_sz = blk_end - ftell(f);
+  char buf[frm_sz];
+  ASSERT(fread(buf, frm_sz, 1, f), "Error reading OPUS frame data");
+
+  opus_t o = (opus_t) { buf, buf + frm_sz };
+  ASSERT(opus_decode(&o), " decoding OPUS");
+
   return 1;
 }
 
