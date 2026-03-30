@@ -158,18 +158,25 @@ static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
 typedef struct opus {
   const char * blk;
   const char * end;
+  unsigned rng;
+  unsigned val;
+  uint8_t leftover;
 } opus_t;
 static uint8_t opus_next(opus_t * o) {
   return o->blk >= o->end ? 0 : *o->blk++;
 }
 
 #define _2xx23 (1 << 23)
-static int opus_dec_norm(opus_t * o, unsigned * rng, uint8_t * last) { // 4.1.2.1
-  if (*rng > _2xx23) return 1;
+static int opus_dec_norm(opus_t * o) { // 4.1.2.1
+  while (o->rng <= _2xx23) {
+    o->rng <<= 8;
 
-  *rng <<= 8;
+    uint8_t next = opus_next(o);
+    uint8_t sym = (o->leftover << 7) | (next >> 1);
+    o->leftover = next;
 
-  //uint8_t next = opus_next(o);
+    o->val = ((o->val << 8) + (255 - sym)) & 0x7FFFFFFF;
+  }
 
   return 1;
 }
@@ -180,12 +187,13 @@ static int opus_decode(opus_t * o) {
 
   uint8_t b0 = opus_next(o);
 
-  unsigned rng = 128; // 4.1.1
-  unsigned val = 127 - (b0 >> 1);
+  o->rng = 128; // 4.1.1
+  o->val = 127 - (b0 >> 1);
+  o->leftover = b0;
 
-  ASSERT(opus_dec_norm(o, &rng, &b0), " renormalising");
+  ASSERT(opus_dec_norm(o), " renormalising");
 
-  printf("%x %x %d\n", rng, val, b0 & 1);
+  printf("%x %x %d\n", o->rng, o->val, o->leftover & 1);
 
   return 1;
 }
