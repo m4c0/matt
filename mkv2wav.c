@@ -199,6 +199,21 @@ static uint16_t opus_decode_icdf_2(opus_t * o, unsigned f1, unsigned f2) {
 
   return sym;
 }
+static uint16_t opus_decode_uint8(opus_t * o, unsigned ft) {
+  // (4.1.5)
+  unsigned sym = ft - MIN(1 + o->val / (o->rng / ft), ft);
+  unsigned fl_k = sym;
+  unsigned fh_k = sym + 1;
+
+  o->val = o->val - (o->rng / ft) * (ft - fh_k);
+  if (fl_k > 0) {
+    o->rng = (o->rng / ft) * (fh_k - fl_k);
+  } else {
+    o->rng = o->rng - (o->rng / ft) * (ft - fh_k);
+  }
+
+  return sym;
+}
 static int opus_decode(opus_t * o) {
   // TOC (3.1) CELT FB (48kHz) 20ms, Stereo, 1 frame per packet
   uint8_t toc = opus_next(o);
@@ -215,8 +230,9 @@ static int opus_decode(opus_t * o) {
   // (4.3) Decode table 56
   unsigned silence = opus_decode_icdf_2(o, 32767, 1);
   unsigned postfilter = opus_decode_icdf_2(o, 1, 1);
+  unsigned octave = opus_decode_uint8(o, 6);
 
-  printf("%8x %8x %d -- %x %x\n", o->rng, o->val, o->leftover & 1, silence, postfilter);
+  printf("%8x %8x %d -- %x %x %d\n", o->rng, o->val, o->leftover & 1, silence, postfilter, octave);
 
   return 1;
 }
