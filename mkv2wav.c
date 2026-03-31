@@ -201,8 +201,18 @@ static int opus_decode(opus_t * o) {
   // (4.1.2)
   const unsigned ft = 32768;
   unsigned fs = ft - MIN(1 + o->val / (o->rng / ft), ft);
+  unsigned silence = fs < 32767 ? 0 : 1;
+  unsigned fl_k = fs < 32767 ? 0 : 32767;
+  unsigned fh_k = fl_k + (fs < 32767 ? 32767 : 1);
 
-  printf("%8x %8x %d %x\n", o->rng, o->val, o->leftover & 1, fs);
+  o->val = o->val - (o->rng / ft) * (ft - fh_k);
+  if (fl_k > 0) {
+    o->rng = (o->rng / ft) * (fh_k - fl_k);
+  } else {
+    o->rng = o->rng - (o->rng / ft) * (ft - fh_k);
+  }
+
+  printf("%8x %8x %d %x\n", o->rng, o->val, o->leftover & 1, silence);
 
   return 1;
 }
