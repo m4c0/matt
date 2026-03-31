@@ -158,8 +158,9 @@ static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
 }
 
 typedef struct opus {
-  const char * blk;
-  const char * end;
+  const uint8_t * blk;
+  const uint8_t * end;
+  unsigned bits_taken;
   unsigned rng;
   unsigned val;
   uint8_t leftover;
@@ -209,7 +210,12 @@ static uint16_t opus_decode_uint8(opus_t * o, unsigned ft) {
   return sym;
 }
 static uint16_t opus_decode_raw(opus_t * o, unsigned n) {
-  return 0x6969;
+  unsigned all = ((unsigned *)o->end)[-1];
+  uint16_t res = (uint16_t)(all >> o->bits_taken) & ((1 << (n + 1)) - 1);
+  o->bits_taken += n;
+  o->end -= o->bits_taken / 8;
+  o->bits_taken %= 8;
+  return res;
 }
 static int opus_decode(opus_t * o) {
   // TOC (3.1) CELT FB (48kHz) 20ms, Stereo, 1 frame per packet
@@ -256,7 +262,7 @@ static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   }
 
   long frm_sz = blk_end - ftell(f);
-  char buf[frm_sz];
+  uint8_t buf[frm_sz];
   ASSERT(fread(buf, frm_sz, 1, f), "Error reading OPUS frame data");
 
   opus_t o = (opus_t) { buf, buf + frm_sz };
