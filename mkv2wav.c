@@ -195,9 +195,19 @@ static uint16_t opus_decode_icdf_2(opus_t * o, unsigned f1, unsigned f2) {
   // (4.1.2)
   const unsigned ft = f1 + f2;
   unsigned fs = ft - MIN(1 + o->val / (o->rng / ft), ft);
-  unsigned sym = fs < f1 ? 0 : f2;
-  unsigned fl_k = fs < f1 ? 0 : f1;
-  unsigned fh_k = fl_k + (fs < f1 ? f1 : f2);
+  unsigned sym = fs < f1 ? 0 : 1;
+  unsigned fl_k = fs < f1 ?  0 : f1;
+  unsigned fh_k = fs < f1 ? f1 : ft;
+  opus_decode_update(o, fl_k, fh_k, ft);
+  return sym;
+}
+static uint16_t opus_decode_icdf_3(opus_t * o, unsigned f1, unsigned f2, unsigned f3) {
+  // (4.1.2)
+  const unsigned ft = f1 + f2 + f3;
+  unsigned fs = ft - MIN(1 + o->val / (o->rng / ft), ft);
+  unsigned sym  = fs < f1 ?  0 : (fs < (f1 + f2) ? 1 : 2);
+  unsigned fl_k = fs < f1 ?  0 : (fs < (f1 + f2) ? f1 : f2);
+  unsigned fh_k = fs < f1 ? f1 : (fs < (f1 + f2) ? (f1 + f2) : ft);
   opus_decode_update(o, fl_k, fh_k, ft);
   return sym;
 }
@@ -236,8 +246,9 @@ static int opus_decode(opus_t * o) {
   unsigned octave = postfilter ? opus_decode_uint8(o, 6) : 0;
   unsigned period = postfilter ? opus_decode_raw(o, 4 + octave) : 0;
   unsigned gain = postfilter ? opus_decode_raw(o, 3) : 0;
+  unsigned tapset = postfilter ? opus_decode_icdf_3(o, 2, 1, 1) : 0;
 
-  printf("%8x %8x %d -- %x %x %d %x %x\n", o->rng, o->val, o->leftover & 1, silence, postfilter, octave, period, gain);
+  printf("%8x %8x %d -- %x %x %d %2x %x %d\n", o->rng, o->val, o->leftover & 1, silence, postfilter, octave, period, gain, tapset);
 
   return 1;
 }
