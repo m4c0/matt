@@ -182,6 +182,14 @@ static int opus_dec_norm(opus_t * o) { // 4.1.2.1
 
   return 1;
 }
+static void opus_decode_update(opus_t * o, unsigned fl_k, unsigned fh_k, unsigned ft) {
+  o->val = o->val - (o->rng / ft) * (ft - fh_k);
+  if (fl_k > 0) {
+    o->rng = (o->rng / ft) * (fh_k - fl_k);
+  } else {
+    o->rng = o->rng - (o->rng / ft) * (ft - fh_k);
+  }
+}
 static uint16_t opus_decode_icdf_2(opus_t * o, unsigned f1, unsigned f2) {
   // (4.1.2)
   const unsigned ft = f1 + f2;
@@ -189,14 +197,7 @@ static uint16_t opus_decode_icdf_2(opus_t * o, unsigned f1, unsigned f2) {
   unsigned sym = fs < f1 ? 0 : f2;
   unsigned fl_k = fs < f1 ? 0 : f1;
   unsigned fh_k = fl_k + (fs < f1 ? f1 : f2);
-
-  o->val = o->val - (o->rng / ft) * (ft - fh_k);
-  if (fl_k > 0) {
-    o->rng = (o->rng / ft) * (fh_k - fl_k);
-  } else {
-    o->rng = o->rng - (o->rng / ft) * (ft - fh_k);
-  }
-
+  opus_decode_update(o, fl_k, fh_k, ft);
   return sym;
 }
 static uint16_t opus_decode_uint8(opus_t * o, unsigned ft) {
@@ -204,15 +205,11 @@ static uint16_t opus_decode_uint8(opus_t * o, unsigned ft) {
   unsigned sym = ft - MIN(1 + o->val / (o->rng / ft), ft);
   unsigned fl_k = sym;
   unsigned fh_k = sym + 1;
-
-  o->val = o->val - (o->rng / ft) * (ft - fh_k);
-  if (fl_k > 0) {
-    o->rng = (o->rng / ft) * (fh_k - fl_k);
-  } else {
-    o->rng = o->rng - (o->rng / ft) * (ft - fh_k);
-  }
-
+  opus_decode_update(o, fl_k, fh_k, ft);
   return sym;
+}
+static uint16_t opus_decode_raw(opus_t * o, unsigned n) {
+  return 0x6969;
 }
 static int opus_decode(opus_t * o) {
   // TOC (3.1) CELT FB (48kHz) 20ms, Stereo, 1 frame per packet
@@ -230,9 +227,11 @@ static int opus_decode(opus_t * o) {
   // (4.3) Decode table 56
   unsigned silence = opus_decode_icdf_2(o, 32767, 1);
   unsigned postfilter = opus_decode_icdf_2(o, 1, 1);
-  unsigned octave = opus_decode_uint8(o, 6);
+  unsigned octave = postfilter ? opus_decode_uint8(o, 6) : 0;
+  unsigned period = postfilter ? opus_decode_raw(o, 4 + octave) : 0;
+  unsigned gain = postfilter ? opus_decode_raw(o, 3) : 0;
 
-  printf("%8x %8x %d -- %x %x %d\n", o->rng, o->val, o->leftover & 1, silence, postfilter, octave);
+  printf("%8x %8x %d -- %x %x %d %x %x\n", o->rng, o->val, o->leftover & 1, silence, postfilter, octave, period, gain);
 
   return 1;
 }
