@@ -7,6 +7,8 @@
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
 #define ASSERT(x, ...) do { if (!(x)) { ERR(__VA_ARGS__); return 0; } } while (0)
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 typedef struct track {
   uint8_t id;
   uint8_t type;
@@ -193,7 +195,14 @@ static int opus_decode(opus_t * o) {
 
   ASSERT(opus_dec_norm(o), " renormalising");
 
-  printf("%x %x %d\n", o->rng, o->val, o->leftover & 1);
+  // (4.3) Decode table 56
+  // Decode "silence" {32767, 1}/32768
+
+  // (4.1.2)
+  const unsigned ft = 32768;
+  unsigned fs = ft - MIN(1 + o->val / (o->rng / ft), ft);
+
+  printf("%8x %8x %d %x\n", o->rng, o->val, o->leftover & 1, fs);
 
   return 1;
 }
