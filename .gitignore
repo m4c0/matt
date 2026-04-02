@@ -1,5 +1,7 @@
 out/
 *.exe
 *.mkv
+*.wav
 build
 mkv2wav
+opus-rfc6716

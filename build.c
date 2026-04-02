@@ -53,8 +53,14 @@ int main(int argc, char ** argv) {
   if (argc != 1) return (usage(), 1);
 
   // TODO: support other compilers/platforms
-  { char * args[] = { EXE(CC), "-Wall", "-o", EXE("mkv2wav"), "mkv2wav.c", 0 };
-    if (run(args)) return 1; }
+  // TODO: support arbitrary path for libopus
+  char * args[] = {
+    EXE(CC), "-Wall",
+    "-I", "opus-rfc6716/include", "opus-rfc6716/libopus.a",
+    "-o", EXE("mkv2wav"), "mkv2wav.c",
+    0
+  };
+  if (run(args)) return 1;
 
   return 0;
 }

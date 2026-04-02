@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "opus.h"
 
 #define ERR(...) fprintf(stderr, __VA_ARGS__)
 #define ASSERT(x, ...) do { if (!(x)) { ERR(__VA_ARGS__); return 0; } } while (0)
@@ -17,6 +18,9 @@ typedef struct track {
   double sample_rate;
   uint8_t channels;
   uint8_t bit_depth;
+
+  OpusDecoder * dec;
+  FILE * wav;
 
   struct track * next;
 } track_t;
@@ -157,6 +161,7 @@ static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
   return res;
 }
 
+#if 0
 typedef struct opus {
   const uint8_t * blk;
   const uint8_t * end;
@@ -168,7 +173,6 @@ typedef struct opus {
 static uint8_t opus_next(opus_t * o) {
   return o->blk >= o->end ? 0 : *o->blk++;
 }
-
 #define _2xx23 (1 << 23)
 static void opus_dec_norm(opus_t * o) { // 4.1.2.1
   while (o->rng <= _2xx23) {
@@ -256,6 +260,27 @@ static int opus_decode(opus_t * o) {
 
   return 1;
 }
+#else
+static int opus(track_t * trk, void * data, unsigned len) {
+  if (!trk->dec) {
+    int err;
+    trk->dec = opus_decoder_create(trk->sample_rate, trk->channels, &err);
+    ASSERT(err == OPUS_OK, "failed to create opus decoder");
+
+    char name[256];
+    sprintf(name, "track-%d.wav", trk->id);
+    ASSERT(trk->wav = fopen(name, "wb"), "error opening wave file");
+  }
+
+  const int max_frame_size = 960 * 6;
+  short out[max_frame_size];
+
+  int smp = opus_decode(trk->dec, data, len, out, max_frame_size, 0);
+  ASSERT(smp > 0, "failed to decode opus frame");
+  
+  return 1;
+}
+#endif
 
 static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   long blk_end = ftell(f) + blk_sz;
@@ -280,8 +305,9 @@ static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   uint8_t buf[frm_sz];
   ASSERT(fread(buf, frm_sz, 1, f), "Error reading OPUS frame data");
 
-  opus_t o = (opus_t) { buf, buf + frm_sz };
-  ASSERT(opus_decode(&o), " decoding OPUS");
+  //opus_t o = (opus_t) { buf, buf + frm_sz };
+  //ASSERT(opus_decode(&o), " decoding OPUS");
+  ASSERT(opus(trks, buf, frm_sz), " decoding block");
 
   return 1;
 }
@@ -349,6 +375,7 @@ static int run(const char * name) {
         trks->sample_rate,
         trks->channels,
         trks->bit_depth);
+    fclose(trks->wav);
   }
   return 1;
 }
