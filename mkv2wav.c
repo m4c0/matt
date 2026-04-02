@@ -270,6 +270,23 @@ static int opus(track_t * trk, void * data, unsigned len) {
     char name[256];
     sprintf(name, "track-%d.wav", trk->id);
     ASSERT(trk->wav = fopen(name, "wb"), "error opening wave file");
+    
+    const uint8_t wav[44] = {
+      'R', 'I', 'F', 'F',
+      0, 0, 0, 0, // file size - 8
+      'W', 'A', 'V', 'E',
+      'f', 'm', 't', ' ',
+      16, 0, 0, 0, // "fmt " size - 8
+      1, 0, // PCM
+      2, 0, // Stereo
+      0x80, 0xbb, 0, 0, // 48kHz
+      0, 0x22, 2, 0, // Bytes to read per second (samples per block * 48k)
+      4, 0, // Samples per block (2 of 16bit)
+      16, 0, // Bits per sample
+      'd', 'a', 't', 'a',
+      0, 0, 0, 0, // data size
+    };
+    ASSERT(fwrite(wav, sizeof(wav), 1, trk->wav), "error writing wav header");
   }
 
   const int max_frame_size = 960 * 6;
@@ -277,6 +294,8 @@ static int opus(track_t * trk, void * data, unsigned len) {
 
   int smp = opus_decode(trk->dec, data, len, out, max_frame_size, 0);
   ASSERT(smp > 0, "failed to decode opus frame");
+
+  ASSERT(fwrite(out, smp * 2, 1, trk->wav), "error writing wave data");
   
   return 1;
 }
@@ -375,6 +394,13 @@ static int run(const char * name) {
         trks->sample_rate,
         trks->channels,
         trks->bit_depth);
+
+    unsigned sz = ftell(trks->wav) - 8;
+    ASSERT(0 == fseek(trks->wav, 4, SEEK_SET), "error seeking to wave file size");
+    ASSERT(fwrite(&sz, 4, 1, trks->wav), "error writing wave file size");
+    sz -= 36;
+    ASSERT(0 == fseek(trks->wav, 40, SEEK_SET), "error seeking to wave data size");
+    ASSERT(fwrite(&sz, 4, 1, trks->wav), "error writing wave data size");
     fclose(trks->wav);
   }
   return 1;
