@@ -266,27 +266,6 @@ static int opus(track_t * trk, void * data, unsigned len) {
     int err;
     trk->dec = opus_decoder_create(trk->sample_rate, trk->channels, &err);
     ASSERT(err == OPUS_OK, "failed to create opus decoder");
-
-    char name[256];
-    sprintf(name, "track-%d.wav", trk->id);
-    ASSERT(trk->wav = fopen(name, "wb"), "error opening wave file");
-    
-    const uint8_t wav[44] = {
-      'R', 'I', 'F', 'F',
-      0, 0, 0, 0, // file size - 8
-      'W', 'A', 'V', 'E',
-      'f', 'm', 't', ' ',
-      16, 0, 0, 0, // "fmt " size - 8
-      1, 0, // PCM
-      2, 0, // Stereo
-      0x80, 0xbb, 0, 0, // 48kHz
-      0, 0x22, 2, 0, // Bytes to read per second (samples per block * 48k)
-      4, 0, // Samples per block (2 of 16bit)
-      16, 0, // Bits per sample
-      'd', 'a', 't', 'a',
-      0, 0, 0, 0, // data size
-    };
-    ASSERT(fwrite(wav, sizeof(wav), 1, trk->wav), "error writing wav header");
   }
 
   const int max_frame_size = 960 * 6;
@@ -300,6 +279,37 @@ static int opus(track_t * trk, void * data, unsigned len) {
   return 1;
 }
 #endif
+
+static int wave_prepare(track_t * trk) {
+  if (trk->wav) return 1;
+
+  char name[256];
+  sprintf(name, "track-%d.wav", trk->id);
+  ASSERT(trk->wav = fopen(name, "wb"), "error opening wave file");
+
+  // TODO: support more
+  ASSERT(trk->sample_rate == 48000, "only 48kHz files for now");
+  ASSERT(trk->channels == 2, "only stereo for now");
+
+  const uint8_t wav[44] = {
+    'R', 'I', 'F', 'F',
+    0, 0, 0, 0, // file size - 8
+    'W', 'A', 'V', 'E',
+    'f', 'm', 't', ' ',
+    16, 0, 0, 0, // "fmt " size - 8
+    1, 0, // PCM
+    2, 0, // Stereo
+    0x80, 0xbb, 0, 0, // 48kHz
+    0, 0x22, 2, 0, // Bytes to read per second (samples per block * 48k)
+    4, 0, // Samples per block (2 of 16bit)
+    16, 0, // Bits per sample
+    'd', 'a', 't', 'a',
+    0, 0, 0, 0, // data size
+  };
+  ASSERT(fwrite(wav, sizeof(wav), 1, trk->wav), "error writing wav header");
+
+  return 1;
+}
 
 static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   long blk_end = ftell(f) + blk_sz;
@@ -323,6 +333,8 @@ static int run_simple_block(FILE * f, uint64_t blk_sz, track_t * trks) {
   long frm_sz = blk_end - ftell(f);
   uint8_t buf[frm_sz];
   ASSERT(fread(buf, frm_sz, 1, f), "Error reading OPUS frame data");
+
+  ASSERT(wave_prepare(trks), " preparing WAV file");
 
   //opus_t o = (opus_t) { buf, buf + frm_sz };
   //ASSERT(opus_decode(&o), " decoding OPUS");
