@@ -295,7 +295,7 @@ static int opus(track_t * trk, void * data, unsigned len) {
   int smp = opus_decode(trk->dec, data, len, out, max_frame_size, 0);
   ASSERT(smp > 0, "failed to decode opus frame");
 
-  ASSERT(fwrite(out, smp * 2, 1, trk->wav), "error writing wave data");
+  ASSERT(fwrite(out, smp * trk->channels * 2, 1, trk->wav), "error writing wave data");
   
   return 1;
 }
