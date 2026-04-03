@@ -53,10 +53,9 @@ int main(int argc, char ** argv) {
   if (argc != 1) return (usage(), 1);
 
   // TODO: support other compilers/platforms
-  // TODO: support arbitrary path for libopus
   char * args[] = {
     EXE(CC), "-Wall",
-    "-I", "opus-rfc6716/include", "opus-rfc6716/libopus.a",
+    "-I", "libopus/include", "libopus/libopus.a",
     "-o", EXE("mkv2wav"), "mkv2wav.c",
     0
   };
