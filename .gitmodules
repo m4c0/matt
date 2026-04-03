@@ -1,0 +1,3 @@
+[submodule "libopus"]
+	path = libopus
+	url = git@github.com:m4c0/libopus
