@@ -161,106 +161,6 @@ static track_t * run_tracks(FILE * f, uint64_t trk_sz) {
   return res;
 }
 
-#if 0
-typedef struct opus {
-  const uint8_t * blk;
-  const uint8_t * end;
-  unsigned bits_taken;
-  unsigned rng;
-  unsigned val;
-  uint8_t leftover;
-} opus_t;
-static uint8_t opus_next(opus_t * o) {
-  return o->blk >= o->end ? 0 : *o->blk++;
-}
-#define _2xx23 (1 << 23)
-static void opus_dec_norm(opus_t * o) { // 4.1.2.1
-  while (o->rng <= _2xx23) {
-    o->rng <<= 8;
-
-    uint8_t next = opus_next(o);
-    uint8_t sym = (o->leftover << 7) | (next >> 1);
-    o->leftover = next;
-
-    o->val = ((o->val << 8) + (255 - sym)) & 0x7FFFFFFF;
-  }
-}
-static void opus_decode_update(opus_t * o, unsigned fl_k, unsigned fh_k, unsigned ft) {
-  o->val = o->val - (o->rng / ft) * (ft - fh_k);
-  if (fl_k > 0) {
-    o->rng = (o->rng / ft) * (fh_k - fl_k);
-  } else {
-    o->rng = o->rng - (o->rng / ft) * (ft - fh_k);
-  }
-  opus_dec_norm(o);
-}
-static uint16_t opus_decode_icdf_2(opus_t * o, unsigned f1, unsigned f2) {
-  // (4.1.2)
-  const unsigned ft = f1 + f2;
-  unsigned fs = ft - MIN(1 + o->val / (o->rng / ft), ft);
-  unsigned sym = fs < f1 ? 0 : 1;
-  unsigned fl_k = fs < f1 ?  0 : f1;
-  unsigned fh_k = fs < f1 ? f1 : ft;
-  opus_decode_update(o, fl_k, fh_k, ft);
-  return sym;
-}
-static uint16_t opus_decode_icdf_3(opus_t * o, unsigned f1, unsigned f2, unsigned f3) {
-  // (4.1.2)
-  const unsigned ft = f1 + f2 + f3;
-  unsigned fs = ft - MIN(1 + o->val / (o->rng / ft), ft);
-  unsigned sym  = fs < f1 ?  0 : (fs < (f1 + f2) ? 1 : 2);
-  unsigned fl_k = fs < f1 ?  0 : (fs < (f1 + f2) ? f1 : f2);
-  unsigned fh_k = fs < f1 ? f1 : (fs < (f1 + f2) ? (f1 + f2) : ft);
-  opus_decode_update(o, fl_k, fh_k, ft);
-  return sym;
-}
-static uint16_t opus_decode_uint8(opus_t * o, unsigned ft) {
-  // (4.1.5)
-  unsigned sym = ft - MIN(1 + o->val / (o->rng / ft), ft);
-  unsigned fl_k = sym;
-  unsigned fh_k = sym + 1;
-  opus_decode_update(o, fl_k, fh_k, ft);
-  return sym;
-}
-static uint16_t opus_decode_raw(opus_t * o, unsigned n) {
-  unsigned all = ((unsigned *)o->end)[-1];
-  uint16_t res = (uint16_t)(all >> o->bits_taken) & ((1 << (n + 1)) - 1);
-  o->bits_taken += n;
-  o->end -= o->bits_taken / 8;
-  o->bits_taken %= 8;
-  return res;
-}
-static int opus_decode(opus_t * o) {
-  // TOC (3.1) CELT FB (48kHz) 20ms, Stereo, 1 frame per packet
-  uint8_t toc = opus_next(o);
-  ASSERT(toc == 0xFC, "Unsupported frame type (found %x)", toc);
-
-  uint8_t b0 = opus_next(o);
-
-  o->rng = 128; // 4.1.1
-  o->val = 127 - (b0 >> 1);
-  o->leftover = b0;
-
-  opus_dec_norm(o);
-
-  // (4.3) Decode table 56
-  unsigned silence = opus_decode_icdf_2(o, 32767, 1);
-  unsigned postfilter = opus_decode_icdf_2(o, 1, 1);
-  unsigned octave = postfilter ? opus_decode_uint8(o, 6) : 0;
-  unsigned period = postfilter ? opus_decode_raw(o, 4 + octave) : 0;
-  unsigned gain = postfilter ? opus_decode_raw(o, 3) : 0;
-  unsigned tapset = postfilter ? opus_decode_icdf_3(o, 2, 1, 1) : 0;
-  unsigned transient = opus_decode_icdf_2(o, 7, 1);
-  unsigned intra = opus_decode_icdf_2(o, 7, 1);
-
-  printf("%8x %8x %d -- %x %x %d %3x - %x %d %d %d\n",
-      o->rng, o->val, o->leftover & 1,
-      silence, postfilter, octave, period, 
-      gain, tapset, transient, intra);
-
-  return 1;
-}
-#else
 static int opus(track_t * trk, void * data, unsigned len) {
   if (!trk->dec) {
     int err;
@@ -278,7 +178,6 @@ static int opus(track_t * trk, void * data, unsigned len) {
   
   return 1;
 }
-#endif
 
 static int wave_prepare(track_t * trk) {
   if (trk->wav) return 1;
