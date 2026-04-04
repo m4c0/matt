@@ -180,7 +180,7 @@ static const char * files[] = {
   0
 };
 static const char * base_args[] = {
-  EXE(CC), "-g", "-Wall", "-Ilibopus/include", "mkv2wav.c", "-o", EXE("mkv2wav")
+  EXE(CC), "-g", "-Wall", "-Ilibopus/include", "-o", EXE("mkv2wav"), "mkv2wav.c", 0
 };
 
 int opus_cc(char * file) {
@@ -216,8 +216,8 @@ int main(int argc, char ** argv) {
     *arg = malloc(strlen(*ptr) + 3);
     sprintf(*arg, "%s.o", *ptr);
   }
+  *arg = 0;
 
   fprintf(stderr, "Compiling mkv2wav\n");
-  for (char ** ptr = args; *ptr; ptr++) puts(*ptr);
   return run(args);
 }
