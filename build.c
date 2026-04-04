@@ -189,8 +189,10 @@ int opus_cc(char * file) {
 
   // Quick hack to avoid compiling twice
   FILE * tst = fopen(obj, "rb");
-  fclose(tst);
-  if (tst) return 0;
+  if (tst) {
+    fclose(tst);
+    return 0;
+  }
 
   fprintf(stderr, "Compiling %s\n", file);
 
