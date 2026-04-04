@@ -199,7 +199,7 @@ int opus_cc(char * file) {
   char * args[] = {
     EXE(CC), "-g", "-c", "-Wno-everything",
     "-Ilibopus/include", "-Ilibopus/celt", "-Ilibopus/silk", "-Ilibopus/silk/float",
-    "-DUSE_ALLOCA", "-Drestrict=", "-DOPUS_VERSION=\"1.0.0\"", "-DOPUS_BUILD",
+    "-DUSE_ALLOCA", "-Drestrict=", "-DOPUS_BUILD",
     file, "-o", obj, 0 };
   return run(args);
 }
